@@ -19,6 +19,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -154,6 +155,10 @@ func Setup(specName string, f func(testSpecificSettings func() testSettings), op
 				postNamespaceCreatedFunc = setupNamespaceWithVMOperatorDependenciesVCSim
 			}
 
+			if testSpecificVariables == nil {
+				testSpecificVariables = map[string]string{}
+			}
+
 			// Update the CLUSTER_CLASS_NAME variable adding the supervisor suffix.
 			if e2eConfig.HasVariable("CLUSTER_CLASS_NAME") {
 				testSpecificVariables["CLUSTER_CLASS_NAME"] = fmt.Sprintf("%s-supervisor", e2eConfig.GetVariable("CLUSTER_CLASS_NAME"))
@@ -245,6 +250,18 @@ func setupNamespaceWithVMOperatorDependenciesVCenter(managementClusterProxy fram
 		return int64(i)
 	}
 
+	libraryItems := []vcsimv1.ContentLibraryItemConfig{}
+	for _, contentLibraryItem := range strings.Split(os.Getenv("VSPHERE_CONTENT_LIBRARY_ITEMS"), ",") {
+		libraryItems = append(libraryItems,
+			vcsimv1.ContentLibraryItemConfig{
+				Name:        contentLibraryItem,
+				ItemType:    "ovf",
+				ProductInfo: "os image",
+				OSInfo:      "ubuntu",
+			},
+		)
+	}
+
 	dependenciesConfig := &vcsimv1.VMOperatorDependencies{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "vcenter",
@@ -253,7 +270,7 @@ func setupNamespaceWithVMOperatorDependenciesVCenter(managementClusterProxy fram
 		Spec: vcsimv1.VMOperatorDependenciesSpec{
 			VCenter: &vcsimv1.VCenterSpec{
 				// NOTE: variables from E2E.sh + presets (or variables overrides when running tests locally)
-				ServerURL:  os.Getenv("VSPHERE_SERVER"),
+				ServerURL:  net.JoinHostPort(os.Getenv("VSPHERE_SERVER"), "443"),
 				Username:   os.Getenv("VSPHERE_USERNAME"),
 				Password:   os.Getenv("VSPHERE_PASSWORD"),
 				Thumbprint: os.Getenv("VSPHERE_TLS_THUMBPRINT"),
@@ -265,15 +282,9 @@ func setupNamespaceWithVMOperatorDependenciesVCenter(managementClusterProxy fram
 				ContentLibrary: vcsimv1.ContentLibraryConfig{
 					Name:      os.Getenv("VSPHERE_CONTENT_LIBRARY"),
 					Datastore: os.Getenv("VSPHERE_DATASTORE"),
-					Items: []vcsimv1.ContentLibraryItemConfig{ // TODO: NEW VARIABLE? FORMAT ?? DOES LIST of NAME WORKS if we make assumptions on other fields?
-						{
-							Name:        "", // From vCenter (copy from a real supervisor)
-							ItemType:    "", // From vCenter (copy from a real supervisor)
-							ProductInfo: "", // From vCenter (copy from a real supervisor)
-							OSInfo:      "", // From vCenter (copy from a real supervisor)
-						},
-					},
+					Items:     libraryItems,
 				},
+				NetworkName: os.Getenv("VSPHERE_NETWORK"),
 			},
 			StorageClasses: []vcsimv1.StorageClass{
 				{

@@ -98,6 +98,8 @@ spec:
                     type: string
                   folder:
                     type: string
+                  networkName:
+                    type: string
                   password:
                     type: string
                   resourcePool:
