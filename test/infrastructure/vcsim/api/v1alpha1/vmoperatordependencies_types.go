@@ -66,6 +66,7 @@ type VCenterSpec struct {
 	Folder         string               `json:"folder,omitempty"`
 	ResourcePool   string               `json:"resourcePool,omitempty"`
 	ContentLibrary ContentLibraryConfig `json:"contentLibrary,omitempty"`
+	NetworkName    string               `json:"networkName,omitempty"`
 }
 
 type StorageClass struct {

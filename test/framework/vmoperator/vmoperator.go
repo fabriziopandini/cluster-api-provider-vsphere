@@ -273,8 +273,8 @@ func ReconcileDependencies(ctx context.Context, c client.Client, dependenciesCon
 			datastoreKey:             "", // It seems it is ok to leave it empty.
 			datacenterKey:            datacenter.Reference().Value,
 			folderKey:                folder.Reference().Value,
-			insecureSkipTLSVerifyKey: "true", // Using this given that we don't have (yet) a solution to inject a CA file into the vm-operator pod.
-			networkNameKey:           "",     // It seems it is ok to leave it empty.
+			insecureSkipTLSVerifyKey: "true",                          // Using this given that we don't have (yet) a solution to inject a CA file into the vm-operator pod.
+			networkNameKey:           config.Spec.VCenter.NetworkName, // It seems it is ok to leave it empty.
 			resourcePoolKey:          resourcePool.Reference().Value,
 			scRequiredKey:            "true",
 			useInventoryKey:          "false",
