@@ -20,11 +20,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
@@ -35,6 +37,7 @@ import (
 
 	vsphereip "sigs.k8s.io/cluster-api-provider-vsphere/test/framework/ip"
 	vspherevcsim "sigs.k8s.io/cluster-api-provider-vsphere/test/framework/vcsim"
+	"sigs.k8s.io/cluster-api-provider-vsphere/test/framework/vmoperator"
 	vcsimv1 "sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/api/v1alpha1"
 )
 
@@ -146,7 +149,10 @@ func Setup(specName string, f func(testSpecificSettings func() testSettings), op
 		}
 
 		if testMode == SupervisorTestMode {
-			postNamespaceCreatedFunc = setupNamespaceWithVMOperatorDependencies
+			postNamespaceCreatedFunc = setupNamespaceWithVMOperatorDependenciesVCenter
+			if testTarget == VCSimTestTarget {
+				postNamespaceCreatedFunc = setupNamespaceWithVMOperatorDependenciesVCSim
+			}
 
 			// Update the CLUSTER_CLASS_NAME variable adding the supervisor suffix.
 			if e2eConfig.HasVariable("CLUSTER_CLASS_NAME") {
@@ -197,7 +203,7 @@ func Setup(specName string, f func(testSpecificSettings func() testSettings), op
 	})
 }
 
-func setupNamespaceWithVMOperatorDependencies(managementClusterProxy framework.ClusterProxy, workloadClusterNamespace string) {
+func setupNamespaceWithVMOperatorDependenciesVCSim(managementClusterProxy framework.ClusterProxy, workloadClusterNamespace string) {
 	c := managementClusterProxy.GetClient()
 
 	vCenterSimulator, err := vspherevcsim.Get(ctx, bootstrapClusterProxy.GetClient())
@@ -225,6 +231,68 @@ func setupNamespaceWithVMOperatorDependencies(managementClusterProxy framework.C
 		}
 		return dependenciesConfig.Status.Ready
 	}, 30*time.Second, 5*time.Second).Should(BeTrue(), "Failed to get VMOperatorDependencies on namespace %s", workloadClusterNamespace)
+}
+
+func setupNamespaceWithVMOperatorDependenciesVCenter(managementClusterProxy framework.ClusterProxy, workloadClusterNamespace string) {
+	c := managementClusterProxy.GetClient()
+
+	Byf("Creating VMOperatorDependencies %s", klog.KRef(workloadClusterNamespace, "vcsim"))
+	mustParseInt64 := func(s string) int64 {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			panic(fmt.Sprintf("%q must be a valid int64", s))
+		}
+		return int64(i)
+	}
+
+	dependenciesConfig := &vcsimv1.VMOperatorDependencies{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "vcenter",
+			Namespace: workloadClusterNamespace,
+		},
+		Spec: vcsimv1.VMOperatorDependenciesSpec{
+			VCenter: &vcsimv1.VCenterSpec{
+				// NOTE: variables from E2E.sh + presets (or variables overrides when running tests locally)
+				ServerURL:  os.Getenv("VSPHERE_SERVER"),
+				Username:   os.Getenv("VSPHERE_USERNAME"),
+				Password:   os.Getenv("VSPHERE_PASSWORD"),
+				Thumbprint: os.Getenv("VSPHERE_TLS_THUMBPRINT"),
+				// NOTE: variables from e2e config (or variables overrides when running tests locally)
+				Datacenter:   os.Getenv("VSPHERE_DATACENTER"),
+				Cluster:      os.Getenv("VSPHERE_COMPUTE_CLUSTER"),
+				Folder:       os.Getenv("VSPHERE_FOLDER"),
+				ResourcePool: os.Getenv("VSPHERE_RESOURCE_POOL"),
+				ContentLibrary: vcsimv1.ContentLibraryConfig{
+					Name:      os.Getenv("VSPHERE_CONTENT_LIBRARY"),
+					Datastore: os.Getenv("VSPHERE_DATASTORE"),
+					Items: []vcsimv1.ContentLibraryItemConfig{ // TODO: NEW VARIABLE? FORMAT ?? DOES LIST of NAME WORKS if we make assumptions on other fields?
+						{
+							Name:        "", // From vCenter (copy from a real supervisor)
+							ItemType:    "", // From vCenter (copy from a real supervisor)
+							ProductInfo: "", // From vCenter (copy from a real supervisor)
+							OSInfo:      "", // From vCenter (copy from a real supervisor)
+						},
+					},
+				},
+			},
+			StorageClasses: []vcsimv1.StorageClass{
+				{
+					Name:          os.Getenv("VSPHERE_STORAGE_CLASS"),
+					StoragePolicy: os.Getenv("VSPHERE_STORAGE_POLICY"),
+				},
+			},
+			VirtualMachineClasses: []vcsimv1.VirtualMachineClass{
+				{
+					Name:   os.Getenv("VSPHERE_MACHINE_CLASS_NAME"),
+					Cpus:   mustParseInt64(os.Getenv("VSPHERE_MACHINE_CLASS_CPU")),
+					Memory: resource.MustParse(os.Getenv("VSPHERE_MACHINE_CLASS_MEMORY")),
+				},
+			},
+		},
+	}
+
+	err := vmoperator.ReconcileDependencies(ctx, c, dependenciesConfig)
+	Expect(err).ToNot(HaveOccurred(), "Failed to reconcile VMOperatorDependencies")
 }
 
 // Note: Copy-paste from CAPI below.

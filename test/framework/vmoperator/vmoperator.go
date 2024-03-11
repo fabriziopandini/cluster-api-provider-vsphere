@@ -135,18 +135,18 @@ func ReconcileDependencies(ctx context.Context, c client.Client, dependenciesCon
 		return errors.Wrap(err, "failed to get storage policy client")
 	}
 
-	storagePolicyID, err := pbmClient.ProfileIDByName(ctx, config.Spec.VCenter.StoragePolicy)
-	if err != nil {
-		return errors.Wrapf(err, "failed to get storage policy profile %s", config.Spec.VCenter.StoragePolicy)
-	}
-
 	// Create StorageClasses & bind them to the user namespace via a ResourceQuota
 	// NOTE: vm-operator is using the ResourceQuota to figure out which StorageClass can be used from a namespace
 	for _, sc := range config.Spec.StorageClasses {
+		storagePolicyID, err := pbmClient.ProfileIDByName(ctx, sc.StoragePolicy)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get storage policy profile %s", sc.StoragePolicy)
+		}
+
 		storageClass := &storagev1.StorageClass{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: sc,
+				Name: sc.Name,
 			},
 			Provisioner: "kubernetes.io/vsphere-volume",
 			Parameters: map[string]string{
@@ -169,7 +169,7 @@ func ReconcileDependencies(ctx context.Context, c client.Client, dependenciesCon
 		resourceQuota := &corev1.ResourceQuota{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      sc,
+				Name:      sc.Name,
 				Namespace: config.Namespace,
 			},
 			Spec: corev1.ResourceQuotaSpec{
@@ -297,13 +297,13 @@ func ReconcileDependencies(ctx context.Context, c client.Client, dependenciesCon
 	for _, vmc := range config.Spec.VirtualMachineClasses {
 		vmClass := &vmoprv1.VirtualMachineClass{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: vmc,
+				Name: vmc.Name,
 			},
 			Spec: vmoprv1.VirtualMachineClassSpec{
 				// TODO: figure out if to make vm class configurable via API
 				Hardware: vmoprv1.VirtualMachineClassHardware{
-					Cpus:   2,
-					Memory: resource.MustParse("4G"),
+					Cpus:   vmc.Cpus,
+					Memory: vmc.Memory,
 				},
 			},
 		}
