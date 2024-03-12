@@ -251,7 +251,7 @@ func setupNamespaceWithVMOperatorDependenciesVCenter(managementClusterProxy fram
 	}
 
 	libraryItems := []vcsimv1.ContentLibraryItemConfig{}
-	for _, contentLibraryItem := range strings.Split(os.Getenv("VSPHERE_CONTENT_LIBRARY_ITEMS"), ",") {
+	for _, contentLibraryItem := range strings.Split(e2eConfig.GetVariable("VSPHERE_CONTENT_LIBRARY_ITEMS"), ",") {
 		libraryItems = append(libraryItems,
 			vcsimv1.ContentLibraryItemConfig{
 				Name:        contentLibraryItem,
@@ -270,33 +270,33 @@ func setupNamespaceWithVMOperatorDependenciesVCenter(managementClusterProxy fram
 		Spec: vcsimv1.VMOperatorDependenciesSpec{
 			VCenter: &vcsimv1.VCenterSpec{
 				// NOTE: variables from E2E.sh + presets (or variables overrides when running tests locally)
-				ServerURL:  net.JoinHostPort(os.Getenv("VSPHERE_SERVER"), "443"),
-				Username:   os.Getenv("VSPHERE_USERNAME"),
-				Password:   os.Getenv("VSPHERE_PASSWORD"),
-				Thumbprint: os.Getenv("VSPHERE_TLS_THUMBPRINT"),
+				ServerURL:  net.JoinHostPort(e2eConfig.GetVariable("VSPHERE_SERVER"), "443"),
+				Username:   e2eConfig.GetVariable("VSPHERE_USERNAME"),
+				Password:   e2eConfig.GetVariable("VSPHERE_PASSWORD"),
+				Thumbprint: e2eConfig.GetVariable("VSPHERE_TLS_THUMBPRINT"),
 				// NOTE: variables from e2e config (or variables overrides when running tests locally)
-				Datacenter:   os.Getenv("VSPHERE_DATACENTER"),
-				Cluster:      os.Getenv("VSPHERE_COMPUTE_CLUSTER"),
-				Folder:       os.Getenv("VSPHERE_FOLDER"),
-				ResourcePool: os.Getenv("VSPHERE_RESOURCE_POOL"),
+				Datacenter:   e2eConfig.GetVariable("VSPHERE_DATACENTER"),
+				Cluster:      e2eConfig.GetVariable("VSPHERE_COMPUTE_CLUSTER"),
+				Folder:       e2eConfig.GetVariable("VSPHERE_FOLDER"),
+				ResourcePool: e2eConfig.GetVariable("VSPHERE_RESOURCE_POOL"),
 				ContentLibrary: vcsimv1.ContentLibraryConfig{
-					Name:      os.Getenv("VSPHERE_CONTENT_LIBRARY"),
-					Datastore: os.Getenv("VSPHERE_DATASTORE"),
+					Name:      e2eConfig.GetVariable("VSPHERE_CONTENT_LIBRARY"),
+					Datastore: e2eConfig.GetVariable("VSPHERE_DATASTORE"),
 					Items:     libraryItems,
 				},
-				NetworkName: os.Getenv("VSPHERE_NETWORK"),
+				NetworkName: e2eConfig.GetVariable("VSPHERE_NETWORK"),
 			},
 			StorageClasses: []vcsimv1.StorageClass{
 				{
-					Name:          os.Getenv("VSPHERE_STORAGE_CLASS"),
-					StoragePolicy: os.Getenv("VSPHERE_STORAGE_POLICY"),
+					Name:          e2eConfig.GetVariable("VSPHERE_STORAGE_CLASS"),
+					StoragePolicy: e2eConfig.GetVariable("VSPHERE_STORAGE_POLICY"),
 				},
 			},
 			VirtualMachineClasses: []vcsimv1.VirtualMachineClass{
 				{
-					Name:   os.Getenv("VSPHERE_MACHINE_CLASS_NAME"),
-					Cpus:   mustParseInt64(os.Getenv("VSPHERE_MACHINE_CLASS_CPU")),
-					Memory: resource.MustParse(os.Getenv("VSPHERE_MACHINE_CLASS_MEMORY")),
+					Name:   e2eConfig.GetVariable("VSPHERE_MACHINE_CLASS_NAME"),
+					Cpus:   mustParseInt64(e2eConfig.GetVariable("VSPHERE_MACHINE_CLASS_CPU")),
+					Memory: resource.MustParse(e2eConfig.GetVariable("VSPHERE_MACHINE_CLASS_MEMORY")),
 				},
 			},
 		},
