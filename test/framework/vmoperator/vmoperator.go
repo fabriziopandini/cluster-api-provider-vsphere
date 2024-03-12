@@ -97,6 +97,7 @@ func ReconcileDependencies(ctx context.Context, c client.Client, dependenciesCon
 	// Get a Client to VCenter and get holds on the relevant objects that should already exist
 	params := session.NewParams().
 		WithServer(config.Spec.VCenter.ServerURL).
+		WithDatacenter(config.Spec.VCenter.Datacenter).
 		WithThumbprint(config.Spec.VCenter.Thumbprint).
 		WithUserInfo(config.Spec.VCenter.Username, config.Spec.VCenter.Password)
 
