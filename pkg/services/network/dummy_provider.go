@@ -19,7 +19,6 @@ package network
 import (
 	"context"
 
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	v1beta2conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions/v1beta2"
@@ -27,6 +26,7 @@ import (
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/core/hub"
 )
 
 // dummyNetworkProvider doesn't provision network resource.
@@ -58,7 +58,7 @@ func (np *dummyNetworkProvider) GetClusterNetworkName(_ context.Context, _ *vmwa
 	return "", nil
 }
 
-func (np *dummyNetworkProvider) ConfigureVirtualMachine(_ context.Context, _ *vmware.ClusterContext, _ *vmwarev1.VSphereMachine, _ *vmoprv1.VirtualMachine) error {
+func (np *dummyNetworkProvider) ConfigureVirtualMachine(_ context.Context, _ *vmware.ClusterContext, _ *vmwarev1.VSphereMachine, _ *vmoprvhub.VirtualMachine) error {
 	return nil
 }
 

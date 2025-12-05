@@ -22,8 +22,6 @@ import (
 
 	"github.com/pkg/errors"
 	nsxvpcv1 "github.com/vmware-tanzu/nsx-operator/pkg/apis/vpc/v1alpha1"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
-	vmoprv1common "github.com/vmware-tanzu/vm-operator/api/v1alpha2/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,6 +38,7 @@ import (
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/core/hub"
 )
 
 // nsxtVPCNetworkProvider provisions nsx-vpc type cluster network.
@@ -213,8 +212,8 @@ func (vp *nsxtVPCNetworkProvider) GetVMServiceAnnotations(_ context.Context, _ *
 }
 
 // ConfigureVirtualMachine configures a VirtualMachine object based on the networking configuration.
-func (vp *nsxtVPCNetworkProvider) ConfigureVirtualMachine(_ context.Context, clusterCtx *vmware.ClusterContext, machine *vmwarev1.VSphereMachine, vm *vmoprv1.VirtualMachine) error {
-	vm.Spec.Network = &vmoprv1.VirtualMachineNetworkSpec{}
+func (vp *nsxtVPCNetworkProvider) ConfigureVirtualMachine(_ context.Context, clusterCtx *vmware.ClusterContext, machine *vmwarev1.VSphereMachine, vm *vmoprvhub.VirtualMachine) error {
+	vm.Spec.Network = &vmoprvhub.VirtualMachineNetworkSpec{}
 
 	// Set the VM primary interface
 	if createSubnetSet(clusterCtx) {
@@ -222,9 +221,9 @@ func (vp *nsxtVPCNetworkProvider) ConfigureVirtualMachine(_ context.Context, clu
 			return errors.New("primary interface can not be configured when createSubnetSet is true")
 		}
 		networkName := clusterCtx.VSphereCluster.Name
-		vm.Spec.Network.Interfaces = append(vm.Spec.Network.Interfaces, vmoprv1.VirtualMachineNetworkInterfaceSpec{
+		vm.Spec.Network.Interfaces = append(vm.Spec.Network.Interfaces, vmoprvhub.VirtualMachineNetworkInterfaceSpec{
 			Name: PrimaryInterfaceName,
-			Network: vmoprv1common.PartialObjectRef{
+			Network: &vmoprvhub.PartialObjectRef{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       NetworkGVKNSXTVPCSubnetSet.Kind,
 					APIVersion: NetworkGVKNSXTVPCSubnetSet.GroupVersion().String(),
@@ -241,9 +240,9 @@ func (vp *nsxtVPCNetworkProvider) ConfigureVirtualMachine(_ context.Context, clu
 		if primary.MTU != 0 {
 			mtu = ptr.To(int64(primary.MTU))
 		}
-		vmInterface := vmoprv1.VirtualMachineNetworkInterfaceSpec{
+		vmInterface := vmoprvhub.VirtualMachineNetworkInterfaceSpec{
 			Name: PrimaryInterfaceName,
-			Network: vmoprv1common.PartialObjectRef{
+			Network: &vmoprvhub.PartialObjectRef{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       primary.Network.Kind,
 					APIVersion: primary.Network.APIVersion,
@@ -261,16 +260,16 @@ func (vp *nsxtVPCNetworkProvider) ConfigureVirtualMachine(_ context.Context, clu
 	return nil
 }
 
-func setRoutes(vmInterface *vmoprv1.VirtualMachineNetworkInterfaceSpec, routes []vmwarev1.RouteSpec) {
+func setRoutes(vmInterface *vmoprvhub.VirtualMachineNetworkInterfaceSpec, routes []vmwarev1.RouteSpec) {
 	for _, route := range routes {
-		vmInterface.Routes = append(vmInterface.Routes, vmoprv1.VirtualMachineNetworkRouteSpec{
+		vmInterface.Routes = append(vmInterface.Routes, vmoprvhub.VirtualMachineNetworkRouteSpec{
 			To:  route.To,
 			Via: route.Via,
 		})
 	}
 }
 
-func setVMSecondaryInterfaces(machine *vmwarev1.VSphereMachine, vm *vmoprv1.VirtualMachine) {
+func setVMSecondaryInterfaces(machine *vmwarev1.VSphereMachine, vm *vmoprvhub.VirtualMachine) {
 	if len(machine.Spec.Network.Interfaces.Secondary) == 0 {
 		return
 	}
@@ -279,9 +278,9 @@ func setVMSecondaryInterfaces(machine *vmwarev1.VSphereMachine, vm *vmoprv1.Virt
 		if secondaryInterface.MTU != 0 {
 			mtu = ptr.To(int64(secondaryInterface.MTU))
 		}
-		vmInterface := vmoprv1.VirtualMachineNetworkInterfaceSpec{
+		vmInterface := vmoprvhub.VirtualMachineNetworkInterfaceSpec{
 			Name: secondaryInterface.Name,
-			Network: vmoprv1common.PartialObjectRef{
+			Network: &vmoprvhub.PartialObjectRef{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       secondaryInterface.Network.Kind,
 					APIVersion: secondaryInterface.Network.APIVersion,

@@ -21,8 +21,6 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
-	vmoprv1common "github.com/vmware-tanzu/vm-operator/api/v1alpha2/common"
 	ncpv1 "github.com/vmware-tanzu/vm-operator/external/ncp/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,6 +35,7 @@ import (
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/core/hub"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/util"
 )
 
@@ -210,10 +209,10 @@ func (np *nsxtNetworkProvider) GetVMServiceAnnotations(ctx context.Context, clus
 }
 
 // ConfigureVirtualMachine configures a VirtualMachine object based on the networking configuration.
-func (np *nsxtNetworkProvider) ConfigureVirtualMachine(_ context.Context, clusterCtx *vmware.ClusterContext, _ *vmwarev1.VSphereMachine, vm *vmoprv1.VirtualMachine) error {
+func (np *nsxtNetworkProvider) ConfigureVirtualMachine(_ context.Context, clusterCtx *vmware.ClusterContext, _ *vmwarev1.VSphereMachine, vm *vmoprvhub.VirtualMachine) error {
 	nsxtClusterNetworkName := GetNSXTVirtualNetworkName(clusterCtx.VSphereCluster.Name)
 	if vm.Spec.Network == nil {
-		vm.Spec.Network = &vmoprv1.VirtualMachineNetworkSpec{}
+		vm.Spec.Network = &vmoprvhub.VirtualMachineNetworkSpec{}
 	}
 	for _, vnif := range vm.Spec.Network.Interfaces {
 		if vnif.Network.TypeMeta.GroupVersionKind() == NetworkGVKNSXT && vnif.Network.Name == nsxtClusterNetworkName {
@@ -221,9 +220,9 @@ func (np *nsxtNetworkProvider) ConfigureVirtualMachine(_ context.Context, cluste
 			return nil
 		}
 	}
-	vm.Spec.Network.Interfaces = append(vm.Spec.Network.Interfaces, vmoprv1.VirtualMachineNetworkInterfaceSpec{
+	vm.Spec.Network.Interfaces = append(vm.Spec.Network.Interfaces, vmoprvhub.VirtualMachineNetworkInterfaceSpec{
 		Name: fmt.Sprintf("eth%d", len(vm.Spec.Network.Interfaces)),
-		Network: vmoprv1common.PartialObjectRef{
+		Network: &vmoprvhub.PartialObjectRef{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       NetworkGVKNSXT.Kind,
 				APIVersion: NetworkGVKNSXT.GroupVersion().String(),
