@@ -19,8 +19,8 @@ package hub
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/util/conversion"
-	utilmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/util/meta"
+	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	conversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 const (
@@ -1287,7 +1287,8 @@ type VirtualMachine struct {
 	Spec   VirtualMachineSpec   `json:"spec,omitempty"`
 	Status VirtualMachineStatus `json:"status,omitempty"`
 
-	Convertible utilmeta.TypeMetaConvertible `json:"convertible,omitempty"`
+	// FIXME: think about name
+	Convertible conversionmeta.TypeMetaConvertible `json:"convertible,omitempty"`
 }
 
 func (vm *VirtualMachine) SetAnnotation(k, v string) {
@@ -1348,6 +1349,10 @@ var _ conversion.Hub = &VirtualMachine{}
 
 func (vm *VirtualMachine) Hub() {}
 
-func (vm *VirtualMachine) APIVersion() string {
+func (vm *VirtualMachine) SetConvertibleAPIVersion(v string) {
+	vm.Convertible.APIVersion = v
+}
+
+func (vm *VirtualMachine) GetConvertibleAPIVersion() string {
 	return vm.Convertible.APIVersion
 }

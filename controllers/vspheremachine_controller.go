@@ -63,8 +63,8 @@ import (
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
 	inframanager "sigs.k8s.io/cluster-api-provider-vsphere/pkg/manager"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator"
-	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/core/hub"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/util"
 )
 

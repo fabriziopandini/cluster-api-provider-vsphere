@@ -41,8 +41,7 @@ import (
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	capvcontext "sigs.k8s.io/cluster-api-provider-vsphere/pkg/context"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
-	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/core/hub"
-	vmoprutil "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/util"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	infrautilv1 "sigs.k8s.io/cluster-api-provider-vsphere/pkg/util"
 )
 
@@ -120,12 +119,11 @@ func (v *VmopMachineService) ReconcileDelete(ctx context.Context, machineCtx cap
 
 	// First, check to see if it's already deleted
 	vmOperatorVM := &vmoprvhub.VirtualMachine{}
-	vmOperatorClient := vmoprutil.NewVersionAwareClient(v.Client)
 	key, err := virtualMachineObjectKey(supervisorMachineCtx.Machine.Name, supervisorMachineCtx.Machine.Namespace, supervisorMachineCtx.VSphereMachine.Spec.NamingStrategy)
 	if err != nil {
 		return err
 	}
-	if err := vmOperatorClient.Get(ctx, *key, vmOperatorVM); err != nil {
+	if err := v.Client.Get(ctx, *key, vmOperatorVM); err != nil {
 		// If debug logging is enabled, report the number of vms in the cluster before and after the reconcile
 		if apierrors.IsNotFound(err) {
 			supervisorMachineCtx.VSphereMachine.Status.VMStatus = vmwarev1.VirtualMachineStateNotFound
@@ -142,7 +140,7 @@ func (v *VmopMachineService) ReconcileDelete(ctx context.Context, machineCtx cap
 	}
 
 	// If none of the above are true, Delete the VM
-	if err := vmOperatorClient.Delete(ctx, vmOperatorVM); err != nil {
+	if err := v.Client.Delete(ctx, vmOperatorVM); err != nil {
 		if apierrors.IsNotFound(err) {
 			supervisorMachineCtx.VSphereMachine.Status.VMStatus = vmwarev1.VirtualMachineStateNotFound
 			return err
@@ -191,12 +189,11 @@ func (v *VmopMachineService) ReconcileNormal(ctx context.Context, machineCtx cap
 
 	// Check for the presence of an existing object
 	vmOperatorVM := &vmoprvhub.VirtualMachine{}
-	vmOperatorClient := vmoprutil.NewVersionAwareClient(v.Client)
 	key, err := virtualMachineObjectKey(supervisorMachineCtx.Machine.Name, supervisorMachineCtx.Machine.Namespace, supervisorMachineCtx.VSphereMachine.Spec.NamingStrategy)
 	if err != nil {
 		return false, err
 	}
-	if err := vmOperatorClient.Get(ctx, *key, vmOperatorVM); err != nil {
+	if err := v.Client.Get(ctx, *key, vmOperatorVM); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return false, err
 		}
@@ -369,12 +366,11 @@ func (v *VmopMachineService) GetHostInfo(ctx context.Context, machineCtx capvcon
 	}
 
 	vmOperatorVM := &vmoprvhub.VirtualMachine{}
-	vmOperatorClient := vmoprutil.NewVersionAwareClient(v.Client)
 	key, err := virtualMachineObjectKey(supervisorMachineCtx.Machine.Name, supervisorMachineCtx.Machine.Namespace, supervisorMachineCtx.VSphereMachine.Spec.NamingStrategy)
 	if err != nil {
 		return "", err
 	}
-	if err := vmOperatorClient.Get(ctx, *key, vmOperatorVM); err != nil {
+	if err := v.Client.Get(ctx, *key, vmOperatorVM); err != nil {
 		return "", err
 	}
 
@@ -405,8 +401,7 @@ func (v *VmopMachineService) reconcileVMOperatorVM(ctx context.Context, supervis
 		minHardwareVersion = int32(hwVersion)
 	}
 
-	vmOperatorClient := vmoprutil.NewVersionAwareClient(v.Client)
-	_, err := ctrlutil.CreateOrPatch(ctx, vmOperatorClient, vmOperatorVM, func() error {
+	_, err := ctrlutil.CreateOrPatch(ctx, v.Client, vmOperatorVM, func() error {
 		// Define a new VM Operator virtual machine.
 		// NOTE: Set field-by-field in order to preserve changes made directly
 		//  to the VirtualMachine spec by other sources (e.g. the cloud provider)
@@ -499,7 +494,7 @@ func (v *VmopMachineService) reconcileVMOperatorVM(ctx context.Context, supervis
 		}
 
 		// Make sure the VSphereMachine owns the VM Operator VirtualMachine.
-		if err := ctrlutil.SetControllerReference(supervisorMachineCtx.VSphereMachine, vmOperatorVM, vmOperatorClient.Scheme()); err != nil {
+		if err := ctrlutil.SetControllerReference(supervisorMachineCtx.VSphereMachine, vmOperatorVM, v.Client.Scheme()); err != nil {
 			return errors.Wrapf(err, "failed to mark %s %s/%s as owner of %s %s/%s",
 				supervisorMachineCtx.VSphereMachine.GroupVersionKind(),
 				supervisorMachineCtx.VSphereMachine.Namespace,
@@ -627,9 +622,8 @@ func (v *VmopMachineService) getVirtualMachinesInCluster(ctx context.Context, su
 	}
 	labels := map[string]string{clusterSelectorKey: supervisorMachineCtx.Cluster.Name}
 	vmList := &vmoprvhub.VirtualMachineList{}
-	vmOperatorClient := vmoprutil.NewVersionAwareClient(v.Client)
 
-	if err := vmOperatorClient.List(
+	if err := v.Client.List(
 		ctx, vmList,
 		client.InNamespace(supervisorMachineCtx.Cluster.Namespace),
 		client.MatchingLabels(labels)); err != nil {
@@ -641,7 +635,7 @@ func (v *VmopMachineService) getVirtualMachinesInCluster(ctx context.Context, su
 	// If the list is empty, fall back to use legacy labels for filtering
 	if len(vmList.Items) == 0 {
 		legacyLabels := map[string]string{legacyClusterSelectorKey: supervisorMachineCtx.Cluster.Name}
-		if err := vmOperatorClient.List(
+		if err := v.Client.List(
 			ctx, vmList,
 			client.InNamespace(supervisorMachineCtx.Cluster.Namespace),
 			client.MatchingLabels(legacyLabels)); err != nil {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package client
 
 import (
 	"context"
@@ -29,55 +29,56 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/core/hub"
-	vmoprv1alpha2conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/core/v1alpha2"
-	vmoprv1alpha5conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/core/v1alpha5"
-	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/util/conversion"
+	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	vmoprv1alpha2conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/v1alpha2"
+	vmoprv1alpha5conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/v1alpha5"
 )
 
-func NewVersionAwareClient(c client.Client) client.Client {
-	return &versionAwareClient{
+func NewClient(c client.Client) client.Client {
+	return &conversionClient{
 		internalClient: c,
 	}
 }
 
-type versionAwareClient struct {
+type conversionClient struct {
 	internalClient client.Client
 
 	overrideGetPreferredVersion func() string
 }
 
-// versionAwareClient must implement client.Client.
-var _ client.Client = &versionAwareClient{}
+// conversionClient must implement client.Client.
+var _ client.Client = &conversionClient{}
 
-func (c versionAwareClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	hubObj, ok := obj.(conversion.Hub)
-	if !ok {
-		return errors.New("obj must implement conversion.Hub")
-	}
-
+func (c conversionClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvk, err := c.GroupVersionKindFor(obj)
 	if err != nil {
 		return err
 	}
 
-	preferredVersion := hubObj.APIVersion()
-	if preferredVersion == "" {
-		preferredVersion = c.preferredVersion()
+	if !conversionRequired(gvk) {
+		return c.internalClient.Get(ctx, key, obj, opts...)
 	}
-	converter, err := c.converterFor(gvk, preferredVersion)
+
+	hubObj, ok := obj.(conversion.Hub)
+	if !ok {
+		return errors.New("obj must implement conversion.Hub")
+	}
+
+	preferredVersion := c.preferredVersion()
+	converter, err := converterFor(gvk, preferredVersion)
 	if err != nil {
 		return err
 	}
 
-	vObjRaw, err := c.internalClient.Scheme().New(converter.GVK())
+	vObjRaw, err := c.internalClient.Scheme().New(converter.GroupVersionKind())
 	if err != nil {
 		return err
 	}
 
 	vObj, ok := vObjRaw.(client.Object)
 	if !ok {
-		// TODO
+		// FIXME
 	}
 
 	if err := c.internalClient.Get(ctx, key, vObj, opts...); err != nil {
@@ -88,13 +89,17 @@ func (c versionAwareClient) Get(ctx context.Context, key client.ObjectKey, obj c
 	return converter.ConvertTo(hubObj)
 }
 
-func (c versionAwareClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+func (c conversionClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	gvkList, err := c.GroupVersionKindFor(list)
 	if err != nil {
 		return err
 	}
 
-	// TODO: check suffix
+	if !conversionRequired(gvkList) {
+		return c.internalClient.List(ctx, list, opts...)
+	}
+
+	// FIXME: check suffix
 	gvkItem := schema.GroupVersionKind{
 		Group:   gvkList.Group,
 		Version: gvkList.Version,
@@ -103,12 +108,12 @@ func (c versionAwareClient) List(ctx context.Context, list client.ObjectList, op
 
 	// FIXME: think about how to pass explicit convertible version (field? option?)
 	preferredVersion := c.preferredVersion()
-	converter, err := c.converterFor(gvkItem, preferredVersion)
+	converter, err := converterFor(gvkItem, preferredVersion)
 	if err != nil {
 		return err
 	}
 
-	gvkVItem := converter.GVK()
+	gvkVItem := converter.GroupVersionKind()
 	gvkVList := schema.GroupVersionKind{
 		Group:   gvkVItem.Group,
 		Version: gvkVItem.Version,
@@ -122,7 +127,7 @@ func (c versionAwareClient) List(ctx context.Context, list client.ObjectList, op
 
 	vList, ok := vListRaw.(client.ObjectList)
 	if !ok {
-		// TODO
+		// FIXME
 	}
 
 	if err := c.internalClient.List(ctx, vList, opts...); err != nil {
@@ -138,7 +143,7 @@ func (c versionAwareClient) List(ctx context.Context, list client.ObjectList, op
 	for _, vItemRaw := range vItems {
 		vItem, ok := vItemRaw.(client.Object)
 		if !ok {
-			// TODO
+			// FIXME
 		}
 		converter.Set(vItem)
 
@@ -165,12 +170,12 @@ func (c versionAwareClient) List(ctx context.Context, list client.ObjectList, op
 	return nil
 }
 
-func (c versionAwareClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
-	// TODO implement me
+func (c conversionClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	// FIXME
 	panic("implement me")
 }
 
-func (c versionAwareClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+func (c conversionClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 
 	// convert from hub type to vm-operator preferred version.
 
@@ -178,21 +183,21 @@ func (c versionAwareClient) Create(ctx context.Context, obj client.Object, opts 
 
 	// convert from vm-operator preferred version to hub version.
 
-	// TODO implement me
+	// FIXME
 	panic("implement me")
 }
 
-func (c versionAwareClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-	// TODO implement me
+func (c conversionClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	// FIXME
 	panic("implement me")
 }
 
-func (c versionAwareClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	// TODO implement me
+func (c conversionClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	// FIXME
 	panic("implement me")
 }
 
-func (c versionAwareClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c conversionClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 
 	// convert from hub type to vm-operator preferred version.
 
@@ -203,59 +208,66 @@ func (c versionAwareClient) Patch(ctx context.Context, obj client.Object, patch 
 	panic("implement me")
 }
 
-func (c versionAwareClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+func (c conversionClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	// CAPV never use DeleteAllOf.
 	panic("not implemented")
 }
 
-func (c versionAwareClient) Status() client.SubResourceWriter {
+func (c conversionClient) Status() client.SubResourceWriter {
 	// CAPV should not modify status of vm-operator resources.
 	panic("not implemented")
 }
 
-func (c versionAwareClient) SubResource(_ string) client.SubResourceClient {
+func (c conversionClient) SubResource(_ string) client.SubResourceClient {
 	// CAPV never acts on vm-operator sub-resources.
 	panic("not implemented")
 }
 
-func (c versionAwareClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+func (c conversionClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
 	return c.internalClient.GroupVersionKindFor(obj)
 }
 
-func (c versionAwareClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+func (c conversionClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
 	return c.internalClient.IsObjectNamespaced(obj)
 }
 
-func (c versionAwareClient) Scheme() *runtime.Scheme {
+func (c conversionClient) Scheme() *runtime.Scheme {
 	return c.internalClient.Scheme()
 }
 
-func (c versionAwareClient) RESTMapper() meta.RESTMapper {
+func (c conversionClient) RESTMapper() meta.RESTMapper {
 	return c.internalClient.RESTMapper()
 }
 
-func (c versionAwareClient) preferredVersion() string {
+func (c conversionClient) preferredVersion() string {
 	if c.overrideGetPreferredVersion != nil {
 		return c.overrideGetPreferredVersion()
 	}
 
-	// TODO implement me
+	// FIXME
 	panic("implement me")
 }
 
-func (c versionAwareClient) converterFor(gvk schema.GroupVersionKind, preferredVersion string) (conversion.Convertible, error) {
+func conversionRequired(gvk schema.GroupVersionKind) bool {
+	switch gvk.GroupVersion() {
+	case vmoprvhub.GroupVersion:
+		return true
+	}
+	return false
+}
+
+func converterFor(gvk schema.GroupVersionKind, preferredVersion string) (conversion.ConvertibleWrapper, error) {
 	switch preferredVersion {
 	case vmoprv1alpha2.GroupVersion.Version:
 		switch gvk {
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachine"):
-			return &vmoprv1alpha2conversion.VirtualMachineConverter{}, nil
+			return &vmoprv1alpha2conversion.VirtualMachineConvertibleWrapper{}, nil
 		}
 	case vmoprv1alpha5.GroupVersion.Version:
 		switch gvk {
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachine"):
-			return &vmoprv1alpha5conversion.VirtualMachineConverter{}, nil
+			return &vmoprv1alpha5conversion.VirtualMachineConvertibleWrapper{}, nil
 		}
 	}
-
 	return nil, errors.Errorf("unsupported GroupVersionKind: %s", gvk)
 }

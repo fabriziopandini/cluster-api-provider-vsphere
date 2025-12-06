@@ -16,26 +16,28 @@ limitations under the License.
 
 package conversion
 
+// FIXME: rules for import name consistency, import rule restrictions (no vmoprv1 outside of this folder)
+
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Convertible defines capability of a type to convertible i.e. it can be converted to/from a hub type.
-type Convertible interface {
+// ConvertibleWrapper defines a wrapper to an object that make the object convertible i.e. it can be converted to/from a hub type.
+type ConvertibleWrapper interface {
 	client.Object
+
+	GroupVersionKind() schema.GroupVersionKind
+	Set(client.Object)
 	ConvertTo(dst Hub) error
 	ConvertFrom(src Hub) error
-	Set(client.Object)
-	GVK() schema.GroupVersionKind
 }
 
-// Hub marks that a given type is the hub type for conversion. This means that
-// all conversions will first convert to the hub type, then convert from the hub
-// type to the destination type. All types besides the hub type should implement
-// Convertible.
+// Hub marks that a given type is the hub type for conversion.
 type Hub interface {
 	client.Object
 	Hub()
-	APIVersion() string
+	// FIXME: think about name
+	SetConvertibleAPIVersion(string)
+	GetConvertibleAPIVersion() string
 }

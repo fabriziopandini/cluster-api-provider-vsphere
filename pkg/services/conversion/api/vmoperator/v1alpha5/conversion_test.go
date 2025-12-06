@@ -1,0 +1,46 @@
+//go:build !race
+
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1alpha5
+
+import (
+	"testing"
+
+	vmoprv1alpha5 "github.com/vmware-tanzu/vm-operator/api/v1alpha5"
+	"sigs.k8s.io/randfill"
+
+	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+)
+
+// Test is disabled when the race detector is enabled (via "//go:build !race" above) because otherwise the fuzz tests would just time out.
+
+func TestFuzzyConversion(t *testing.T) {
+	t.Run("for VirtualMachine", conversion.RoundTripTest(conversion.RoundTripTestInput{
+		Hub:          &vmoprvhub.VirtualMachine{},
+		Spoke:        &vmoprv1alpha5.VirtualMachine{},
+		SpokeWrapper: &VirtualMachineConvertibleWrapper{},
+		FuzzerFuncs:  []any{hubVirtualMachineStatus},
+	}))
+}
+
+func hubVirtualMachineStatus(in *vmoprvhub.VirtualMachineStatus, c randfill.Continue) {
+	c.Fill(in)
+	// FIXME
+	in.Host = ""
+}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package client
 
 import (
 	"context"
@@ -22,15 +22,15 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	vmopv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
-	vmopv1alpha5 "github.com/vmware-tanzu/vm-operator/api/v1alpha5"
+	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
+	vmoprv1alpha5 "github.com/vmware-tanzu/vm-operator/api/v1alpha5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	vmopvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/core/hub"
-	utilmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator/api/util/meta"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	utilmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 var (
@@ -39,9 +39,9 @@ var (
 )
 
 func init() {
-	_ = vmopvhub.AddToScheme(scheme)
-	_ = vmopv1alpha2.AddToScheme(scheme)
-	_ = vmopv1alpha5.AddToScheme(scheme)
+	_ = vmoprvhub.AddToScheme(scheme)
+	_ = vmoprv1alpha2.AddToScheme(scheme)
+	_ = vmoprv1alpha5.AddToScheme(scheme)
 }
 
 func Test_versionAwareClient_Get(t *testing.T) {
@@ -55,27 +55,19 @@ func Test_versionAwareClient_Get(t *testing.T) {
 		{
 			name:             "Get VirtualMachine when preferred version is v1alpha2",
 			preferredVersion: "v1alpha2",
-			vmopObj: &vmopv1alpha2.VirtualMachine{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "VirtualMachine",
-					APIVersion: vmopv1alpha2.GroupVersion.String(),
-				},
+			vmopObj: &vmoprv1alpha2.VirtualMachine{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-vm",
 					Namespace: "test-ns",
 				},
 			},
-			wantHubObj: &vmopvhub.VirtualMachine{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "VirtualMachine",
-					APIVersion: vmopvhub.GroupVersion.String(),
-				},
-				Convertible: utilmeta.TypeMetaConvertible{
-					APIVersion: vmopv1alpha2.GroupVersion.String(),
-				},
+			wantHubObj: &vmoprvhub.VirtualMachine{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-vm",
 					Namespace: "test-ns",
+				},
+				Convertible: utilmeta.TypeMetaConvertible{
+					APIVersion: vmoprv1alpha2.GroupVersion.String(),
 				},
 			},
 			wantErr: false,
@@ -83,27 +75,19 @@ func Test_versionAwareClient_Get(t *testing.T) {
 		{
 			name:             "Get VirtualMachine when preferred version is v1alpha5",
 			preferredVersion: "v1alpha5",
-			vmopObj: &vmopv1alpha5.VirtualMachine{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "VirtualMachine",
-					APIVersion: vmopv1alpha5.GroupVersion.String(),
-				},
+			vmopObj: &vmoprv1alpha5.VirtualMachine{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-vm",
 					Namespace: "test-ns",
 				},
 			},
-			wantHubObj: &vmopvhub.VirtualMachine{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "VirtualMachine",
-					APIVersion: vmopvhub.GroupVersion.String(),
-				},
-				Convertible: utilmeta.TypeMetaConvertible{
-					APIVersion: vmopv1alpha5.GroupVersion.String(),
-				},
+			wantHubObj: &vmoprvhub.VirtualMachine{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-vm",
 					Namespace: "test-ns",
+				},
+				Convertible: utilmeta.TypeMetaConvertible{
+					APIVersion: vmoprv1alpha5.GroupVersion.String(),
 				},
 			},
 			wantErr: false,
@@ -113,14 +97,14 @@ func Test_versionAwareClient_Get(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			c := versionAwareClient{
+			c := conversionClient{
 				internalClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.vmopObj).Build(),
 				overrideGetPreferredVersion: func() string {
 					return tt.preferredVersion
 				},
 			}
 
-			hubObj := &vmopvhub.VirtualMachine{}
+			hubObj := &vmoprvhub.VirtualMachine{}
 			err := c.Get(ctx, client.ObjectKeyFromObject(tt.vmopObj), hubObj)
 			if (err != nil) != tt.wantErr {
 				g.Fail(fmt.Sprintf("Get() error = %v, wantErr %v", err, tt.wantErr))
@@ -144,10 +128,10 @@ func Test_versionAwareClient_List(t *testing.T) {
 			name:             "Get VirtualMachine when preferred version is v1alpha2",
 			preferredVersion: "v1alpha2",
 			vmopObjs: []client.Object{
-				&vmopv1alpha2.VirtualMachine{
+				&vmoprv1alpha2.VirtualMachine{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       "VirtualMachine",
-						APIVersion: vmopv1alpha2.GroupVersion.String(),
+						APIVersion: vmoprv1alpha2.GroupVersion.String(),
 					},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-vm",
@@ -156,17 +140,13 @@ func Test_versionAwareClient_List(t *testing.T) {
 				},
 			},
 			wantHubObjs: []client.Object{
-				&vmopvhub.VirtualMachine{
-					TypeMeta: metav1.TypeMeta{
-						Kind:       "VirtualMachine",
-						APIVersion: vmopvhub.GroupVersion.String(),
-					},
-					Convertible: utilmeta.TypeMetaConvertible{
-						APIVersion: vmopv1alpha2.GroupVersion.String(),
-					},
+				&vmoprvhub.VirtualMachine{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-vm",
 						Namespace: "test-ns",
+					},
+					Convertible: utilmeta.TypeMetaConvertible{
+						APIVersion: vmoprv1alpha2.GroupVersion.String(),
 					},
 				},
 			},
@@ -177,14 +157,14 @@ func Test_versionAwareClient_List(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			c := versionAwareClient{
+			c := conversionClient{
 				internalClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.vmopObjs...).Build(),
 				overrideGetPreferredVersion: func() string {
 					return tt.preferredVersion
 				},
 			}
 
-			hubObjs := &vmopvhub.VirtualMachineList{}
+			hubObjs := &vmoprvhub.VirtualMachineList{}
 			err := c.List(ctx, hubObjs)
 			if (err != nil) != tt.wantErr {
 				g.Fail(fmt.Sprintf("Get() error = %v, wantErr %v", err, tt.wantErr))
