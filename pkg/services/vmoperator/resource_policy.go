@@ -20,12 +20,12 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 )
 
 // RPService represents the ability to reconcile a VirtualMachineSetResourcePolicy via vmoperator.
@@ -43,8 +43,8 @@ func (s *RPService) ReconcileResourcePolicy(ctx context.Context, clusterCtx *vmw
 	return resourcePolicy.Name, nil
 }
 
-func (s *RPService) newVirtualMachineSetResourcePolicy(clusterCtx *vmware.ClusterContext) *vmoprv1.VirtualMachineSetResourcePolicy {
-	return &vmoprv1.VirtualMachineSetResourcePolicy{
+func (s *RPService) newVirtualMachineSetResourcePolicy(clusterCtx *vmware.ClusterContext) *vmoprvhub.VirtualMachineSetResourcePolicy {
+	return &vmoprvhub.VirtualMachineSetResourcePolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: clusterCtx.Cluster.Namespace,
 			Name:      clusterCtx.Cluster.Name,
@@ -52,12 +52,12 @@ func (s *RPService) newVirtualMachineSetResourcePolicy(clusterCtx *vmware.Cluste
 	}
 }
 
-func (s *RPService) createOrPatchVirtualMachineSetResourcePolicy(ctx context.Context, clusterCtx *vmware.ClusterContext) (*vmoprv1.VirtualMachineSetResourcePolicy, error) {
+func (s *RPService) createOrPatchVirtualMachineSetResourcePolicy(ctx context.Context, clusterCtx *vmware.ClusterContext) (*vmoprvhub.VirtualMachineSetResourcePolicy, error) {
 	vmResourcePolicy := s.newVirtualMachineSetResourcePolicy(clusterCtx)
 
 	_, err := ctrlutil.CreateOrPatch(ctx, s.Client, vmResourcePolicy, func() error {
-		vmResourcePolicy.Spec = vmoprv1.VirtualMachineSetResourcePolicySpec{
-			ResourcePool: vmoprv1.ResourcePoolSpec{
+		vmResourcePolicy.Spec = vmoprvhub.VirtualMachineSetResourcePolicySpec{
+			ResourcePool: vmoprvhub.ResourcePoolSpec{
 				Name: clusterCtx.Cluster.Name,
 			},
 			Folder: clusterCtx.Cluster.Name,

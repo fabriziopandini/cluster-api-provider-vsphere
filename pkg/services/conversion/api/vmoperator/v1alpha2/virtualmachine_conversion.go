@@ -58,6 +58,7 @@ func (c *VirtualMachineConvertibleWrapper) ConvertTo(dstRaw conversion.Hub) erro
 
 	src := c.VirtualMachine
 	dst.ObjectMeta = src.ObjectMeta
+
 	if src.Spec.Bootstrap != nil {
 		dst.Spec.Bootstrap = &vmoprvhub.VirtualMachineBootstrapSpec{}
 		if src.Spec.Bootstrap.CloudInit != nil {
@@ -190,6 +191,7 @@ func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw conversion.Hub) er
 
 	dst := &vmoprv1alpha2.VirtualMachine{}
 	dst.ObjectMeta = src.ObjectMeta
+
 	if src.Spec.Bootstrap != nil {
 		dst.Spec.Bootstrap = &vmoprv1alpha2.VirtualMachineBootstrapSpec{}
 		if src.Spec.Bootstrap.CloudInit != nil {

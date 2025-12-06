@@ -37,6 +37,16 @@ func TestFuzzyConversion(t *testing.T) {
 		SpokeWrapper: &VirtualMachineConvertibleWrapper{},
 		FuzzerFuncs:  []any{hubVirtualMachineStatus},
 	}))
+	t.Run("for VirtualMachineService", conversion.RoundTripTest(conversion.RoundTripTestInput{
+		Hub:          &vmoprvhub.VirtualMachineService{},
+		Spoke:        &vmoprv1alpha2.VirtualMachineService{},
+		SpokeWrapper: &VirtualMachineServiceConvertibleWrapper{},
+	}))
+	t.Run("for VirtualMachineSetResourcePolicy", conversion.RoundTripTest(conversion.RoundTripTestInput{
+		Hub:          &vmoprvhub.VirtualMachineSetResourcePolicy{},
+		Spoke:        &vmoprv1alpha2.VirtualMachineSetResourcePolicy{},
+		SpokeWrapper: &VirtualMachineSetResourcePolicyConvertibleWrapper{},
+	}))
 }
 
 func hubVirtualMachineStatus(in *vmoprvhub.VirtualMachineStatus, c randfill.Continue) {
