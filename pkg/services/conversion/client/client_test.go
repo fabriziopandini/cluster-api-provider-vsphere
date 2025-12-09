@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	utilmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 var (
@@ -66,7 +66,7 @@ func Test_versionAwareClient_Get(t *testing.T) {
 					Name:      "test-vm",
 					Namespace: "test-ns",
 				},
-				Convertible: utilmeta.TypeMetaConvertible{
+				Convertible: vmoprconversionmeta.TypeMetaConvertible{
 					APIVersion: vmoprv1alpha2.GroupVersion.String(),
 				},
 			},
@@ -86,7 +86,7 @@ func Test_versionAwareClient_Get(t *testing.T) {
 					Name:      "test-vm",
 					Namespace: "test-ns",
 				},
-				Convertible: utilmeta.TypeMetaConvertible{
+				Convertible: vmoprconversionmeta.TypeMetaConvertible{
 					APIVersion: vmoprv1alpha5.GroupVersion.String(),
 				},
 			},
@@ -145,7 +145,7 @@ func Test_versionAwareClient_List(t *testing.T) {
 						Name:      "test-vm",
 						Namespace: "test-ns",
 					},
-					Convertible: utilmeta.TypeMetaConvertible{
+					Convertible: vmoprconversionmeta.TypeMetaConvertible{
 						APIVersion: vmoprv1alpha2.GroupVersion.String(),
 					},
 				},

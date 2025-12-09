@@ -35,6 +35,7 @@ import (
 
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	capvcontext "sigs.k8s.io/cluster-api-provider-vsphere/pkg/context"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 )
 
 // +kubebuilder:rbac:groups=vmware.infrastructure.cluster.x-k8s.io,resources=vspheremachinetemplates,verbs=get;list;watch;create;update;patch;delete
@@ -80,7 +81,7 @@ func (r *vSphereMachineTemplateReconciler) Reconcile(ctx context.Context, req ct
 	}
 
 	// Fetch the VirtualMachineClass
-	vmClass := &vmoprv1.VirtualMachineClass{}
+	vmClass := &vmoprvhub.VirtualMachineClass{}
 	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: vSphereMachineTemplate.Spec.Template.Spec.ClassName}, vmClass); err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "failed to get VirtualMachineClass %q for VSphereMachineTemplate", vSphereMachineTemplate.Spec.Template.Spec.ClassName)
 	}

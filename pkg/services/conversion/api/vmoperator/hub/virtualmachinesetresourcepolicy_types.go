@@ -19,8 +19,8 @@ package hub
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
-	conversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 // ResourcePoolSpec defines a Logical Grouping of workloads that share resource
@@ -92,7 +92,7 @@ type VirtualMachineSetResourcePolicy struct {
 	Status VirtualMachineSetResourcePolicyStatus `json:"status,omitempty"`
 
 	// FIXME: think about name
-	Convertible conversionmeta.TypeMetaConvertible `json:"convertible,omitempty"`
+	Convertible vmoprconversionmeta.TypeMetaConvertible `json:"convertible,omitempty"`
 }
 
 func (p *VirtualMachineSetResourcePolicy) NamespacedName() string {
@@ -112,14 +112,14 @@ func init() {
 	objectTypes = append(objectTypes, &VirtualMachineSetResourcePolicy{}, &VirtualMachineSetResourcePolicyList{})
 }
 
-var _ conversion.Hub = &VirtualMachineSetResourcePolicy{}
+var _ vmoprconversion.Hub = &VirtualMachineSetResourcePolicy{}
 
-func (vm *VirtualMachineSetResourcePolicy) Hub() {}
+func (p *VirtualMachineSetResourcePolicy) Hub() {}
 
-func (vm *VirtualMachineSetResourcePolicy) SetConvertibleAPIVersion(v string) {
-	vm.Convertible.APIVersion = v
+func (p *VirtualMachineSetResourcePolicy) SetConvertibleAPIVersion(v string) {
+	p.Convertible.APIVersion = v
 }
 
-func (vm *VirtualMachineSetResourcePolicy) GetConvertibleAPIVersion() string {
-	return vm.Convertible.APIVersion
+func (p *VirtualMachineSetResourcePolicy) GetConvertibleAPIVersion() string {
+	return p.Convertible.APIVersion
 }

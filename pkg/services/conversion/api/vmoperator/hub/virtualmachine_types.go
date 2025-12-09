@@ -19,8 +19,8 @@ package hub
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
-	conversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 const (
@@ -1288,7 +1288,7 @@ type VirtualMachine struct {
 	Status VirtualMachineStatus `json:"status,omitempty"`
 
 	// FIXME: think about name
-	Convertible conversionmeta.TypeMetaConvertible `json:"convertible,omitempty"`
+	Convertible vmoprconversionmeta.TypeMetaConvertible `json:"convertible,omitempty"`
 }
 
 func (vm *VirtualMachine) SetAnnotation(k, v string) {
@@ -1345,7 +1345,7 @@ func init() {
 	objectTypes = append(objectTypes, &VirtualMachine{}, &VirtualMachineList{})
 }
 
-var _ conversion.Hub = &VirtualMachine{}
+var _ vmoprconversion.Hub = &VirtualMachine{}
 
 func (vm *VirtualMachine) Hub() {}
 

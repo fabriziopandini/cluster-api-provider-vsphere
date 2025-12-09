@@ -23,16 +23,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	utilmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 type VirtualMachineServiceConvertibleWrapper struct {
 	*vmoprv1alpha2.VirtualMachineService
 }
 
-var _ conversion.ConvertibleWrapper = &VirtualMachineServiceConvertibleWrapper{}
+var _ vmoprconversion.ConvertibleWrapper = &VirtualMachineServiceConvertibleWrapper{}
 
 func (c *VirtualMachineServiceConvertibleWrapper) GroupVersionKind() schema.GroupVersionKind {
 	return vmoprv1alpha2.GroupVersion.WithKind("VirtualMachineService")
@@ -43,7 +43,7 @@ func (c *VirtualMachineServiceConvertibleWrapper) Set(objRaw client.Object) {
 	c.VirtualMachineService = objRaw.(*vmoprv1alpha2.VirtualMachineService)
 }
 
-func (c *VirtualMachineServiceConvertibleWrapper) ConvertTo(dstRaw conversion.Hub) error {
+func (c *VirtualMachineServiceConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub) error {
 	if c.VirtualMachineService == nil {
 		return errors.New("method ConvertTo must be called after calling Set")
 	}
@@ -80,13 +80,13 @@ func (c *VirtualMachineServiceConvertibleWrapper) ConvertTo(dstRaw conversion.Hu
 	}
 
 	// The hub should keep track of the spoke version it was generated from.
-	dst.Convertible = utilmeta.TypeMetaConvertible{
+	dst.Convertible = vmoprconversionmeta.TypeMetaConvertible{
 		APIVersion: c.GroupVersionKind().GroupVersion().String(),
 	}
 	return nil
 }
 
-func (c *VirtualMachineServiceConvertibleWrapper) ConvertFrom(srcRaw conversion.Hub) error {
+func (c *VirtualMachineServiceConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hub) error {
 	src, ok := srcRaw.(*vmoprvhub.VirtualMachineService)
 	if !ok {
 		errors.New("srcRaw must be of type *vmoprvhub.VirtualMachineService")

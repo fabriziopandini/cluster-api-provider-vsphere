@@ -27,16 +27,16 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	utilmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 type VirtualMachineConvertibleWrapper struct {
 	*vmoprv1alpha5.VirtualMachine
 }
 
-var _ conversion.ConvertibleWrapper = &VirtualMachineConvertibleWrapper{}
+var _ vmoprconversion.ConvertibleWrapper = &VirtualMachineConvertibleWrapper{}
 
 func (c *VirtualMachineConvertibleWrapper) GroupVersionKind() schema.GroupVersionKind {
 	return vmoprv1alpha5.GroupVersion.WithKind("VirtualMachine")
@@ -47,7 +47,7 @@ func (c *VirtualMachineConvertibleWrapper) Set(objRaw client.Object) {
 	c.VirtualMachine = objRaw.(*vmoprv1alpha5.VirtualMachine)
 }
 
-func (c *VirtualMachineConvertibleWrapper) ConvertTo(dstRaw conversion.Hub) error {
+func (c *VirtualMachineConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub) error {
 	if c.VirtualMachine == nil {
 		return errors.New("method ConvertTo must be called after calling Set")
 	}
@@ -172,13 +172,13 @@ func (c *VirtualMachineConvertibleWrapper) ConvertTo(dstRaw conversion.Hub) erro
 	dst.Status.PowerState = vmoprvhub.VirtualMachinePowerState(src.Status.PowerState)
 
 	// The hub should keep track of the spoke version it was generated from.
-	dst.Convertible = utilmeta.TypeMetaConvertible{
+	dst.Convertible = vmoprconversionmeta.TypeMetaConvertible{
 		APIVersion: c.GroupVersionKind().GroupVersion().String(),
 	}
 	return nil
 }
 
-func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw conversion.Hub) error {
+func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hub) error {
 	src, ok := srcRaw.(*vmoprvhub.VirtualMachine)
 	if !ok {
 		errors.New("srcRaw must be of type *vmoprvhub.VirtualMachine")

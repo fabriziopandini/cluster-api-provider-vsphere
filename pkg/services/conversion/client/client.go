@@ -29,13 +29,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	vmoprv1alpha2conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/v1alpha2"
 	vmoprv1alpha5conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/v1alpha5"
 )
 
-func NewClient(c client.Client) client.Client {
+func New(c client.Client) client.Client {
 	return &conversionClient{
 		internalClient: c,
 	}
@@ -60,7 +60,7 @@ func (c conversionClient) Get(ctx context.Context, key client.ObjectKey, obj cli
 		return c.internalClient.Get(ctx, key, obj, opts...)
 	}
 
-	hubObj, ok := obj.(conversion.Hub)
+	hubObj, ok := obj.(vmoprconversion.Hub)
 	if !ok {
 		return errors.New("obj must implement conversion.Hub")
 	}
@@ -152,7 +152,7 @@ func (c conversionClient) List(ctx context.Context, list client.ObjectList, opts
 			return err
 		}
 
-		hubObj, ok := hubRaw.(conversion.Hub)
+		hubObj, ok := hubRaw.(vmoprconversion.Hub)
 		if !ok {
 			return errors.New("list.Items must implement conversion.Hub")
 		}
@@ -209,18 +209,27 @@ func (c conversionClient) Patch(ctx context.Context, obj client.Object, patch cl
 }
 
 func (c conversionClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	gvkList, err := c.GroupVersionKindFor(obj)
+	if err != nil {
+		return err
+	}
+
+	if !conversionRequired(gvkList) {
+		return c.internalClient.DeleteAllOf(ctx, obj, opts...)
+	}
+
 	// CAPV never use DeleteAllOf.
 	panic("not implemented")
 }
 
 func (c conversionClient) Status() client.SubResourceWriter {
-	// CAPV should not modify status of vm-operator resources.
-	panic("not implemented")
+	// FIXME: looks like there is no way to prevent this for the hub version (not sure we have / want to block)
+	return c.internalClient.Status()
 }
 
-func (c conversionClient) SubResource(_ string) client.SubResourceClient {
-	// CAPV never acts on vm-operator sub-resources.
-	panic("not implemented")
+func (c conversionClient) SubResource(subResource string) client.SubResourceClient {
+	// FIXME: looks like there is no way to prevent this for the hub version (not sure we have / want to block)
+	return c.internalClient.SubResource(subResource)
 }
 
 func (c conversionClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
@@ -245,7 +254,7 @@ func (c conversionClient) preferredVersion() string {
 	}
 
 	// FIXME
-	panic("implement me")
+	return vmoprv1alpha2.GroupVersion.Version
 }
 
 func conversionRequired(gvk schema.GroupVersionKind) bool {
@@ -256,17 +265,29 @@ func conversionRequired(gvk schema.GroupVersionKind) bool {
 	return false
 }
 
-func converterFor(gvk schema.GroupVersionKind, preferredVersion string) (conversion.ConvertibleWrapper, error) {
+func converterFor(gvk schema.GroupVersionKind, preferredVersion string) (vmoprconversion.ConvertibleWrapper, error) {
 	switch preferredVersion {
 	case vmoprv1alpha2.GroupVersion.Version:
 		switch gvk {
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachine"):
 			return &vmoprv1alpha2conversion.VirtualMachineConvertibleWrapper{}, nil
+		case vmoprvhub.GroupVersion.WithKind("VirtualMachineClass"):
+			return &vmoprv1alpha2conversion.VirtualMachineClassConvertibleWrapper{}, nil
+		case vmoprvhub.GroupVersion.WithKind("VirtualMachineService"):
+			return &vmoprv1alpha2conversion.VirtualMachineServiceConvertibleWrapper{}, nil
+		case vmoprvhub.GroupVersion.WithKind("VirtualMachineSetResourcePolicy"):
+			return &vmoprv1alpha2conversion.VirtualMachineSetResourcePolicyConvertibleWrapper{}, nil
 		}
 	case vmoprv1alpha5.GroupVersion.Version:
 		switch gvk {
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachine"):
 			return &vmoprv1alpha5conversion.VirtualMachineConvertibleWrapper{}, nil
+		case vmoprvhub.GroupVersion.WithKind("VirtualMachineClass"):
+			return &vmoprv1alpha5conversion.VirtualMachineClassConvertibleWrapper{}, nil
+		case vmoprvhub.GroupVersion.WithKind("VirtualMachineService"):
+			return &vmoprv1alpha5conversion.VirtualMachineServiceConvertibleWrapper{}, nil
+		case vmoprvhub.GroupVersion.WithKind("VirtualMachineSetResourcePolicy"):
+			return &vmoprv1alpha5conversion.VirtualMachineSetResourcePolicyConvertibleWrapper{}, nil
 		}
 	}
 	return nil, errors.Errorf("unsupported GroupVersionKind: %s", gvk)

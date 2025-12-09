@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/randfill"
 
-	conversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 // RoundTripTestInput contains input parameters
@@ -60,7 +60,7 @@ func RoundTripTest(input RoundTripTestInput) func(*testing.T) {
 		t.Helper()
 		t.Run("hub-spoke-hub", func(t *testing.T) {
 			fuzzer := conversionutil.GetFuzzer(input.Scheme, func(_ runtimeserializer.CodecFactory) []any {
-				return append(input.FuzzerFuncs, func(in *conversionmeta.TypeMetaConvertible, c randfill.Continue) {
+				return append(input.FuzzerFuncs, func(in *vmoprconversionmeta.TypeMetaConvertible, c randfill.Continue) {
 					// Ensure TypeMetaConvertible is not set by the fuzzer.
 				})
 			})

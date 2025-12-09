@@ -23,16 +23,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	utilmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 type VirtualMachineSetResourcePolicyConvertibleWrapper struct {
 	*vmoprv1alpha5.VirtualMachineSetResourcePolicy
 }
 
-var _ conversion.ConvertibleWrapper = &VirtualMachineSetResourcePolicyConvertibleWrapper{}
+var _ vmoprconversion.ConvertibleWrapper = &VirtualMachineSetResourcePolicyConvertibleWrapper{}
 
 func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) GroupVersionKind() schema.GroupVersionKind {
 	return vmoprv1alpha5.GroupVersion.WithKind("VirtualMachineSetResourcePolicy")
@@ -43,7 +43,7 @@ func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) Set(objRaw client.Ob
 	c.VirtualMachineSetResourcePolicy = objRaw.(*vmoprv1alpha5.VirtualMachineSetResourcePolicy)
 }
 
-func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) ConvertTo(dstRaw conversion.Hub) error {
+func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub) error {
 	if c.VirtualMachineSetResourcePolicy == nil {
 		return errors.New("method ConvertTo must be called after calling Set")
 	}
@@ -63,13 +63,13 @@ func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) ConvertTo(dstRaw con
 	}
 
 	// The hub should keep track of the spoke version it was generated from.
-	dst.Convertible = utilmeta.TypeMetaConvertible{
+	dst.Convertible = vmoprconversionmeta.TypeMetaConvertible{
 		APIVersion: c.GroupVersionKind().GroupVersion().String(),
 	}
 	return nil
 }
 
-func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) ConvertFrom(srcRaw conversion.Hub) error {
+func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hub) error {
 	src, ok := srcRaw.(*vmoprvhub.VirtualMachineSetResourcePolicy)
 	if !ok {
 		errors.New("srcRaw must be of type *vmoprvhub.VirtualMachineSetResourcePolicy")

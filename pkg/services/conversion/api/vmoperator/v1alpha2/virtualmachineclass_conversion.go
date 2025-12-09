@@ -28,38 +28,37 @@ import (
 	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
-type VirtualMachineSetResourcePolicyConvertibleWrapper struct {
-	*vmoprv1alpha2.VirtualMachineSetResourcePolicy
+type VirtualMachineClassConvertibleWrapper struct {
+	*vmoprv1alpha2.VirtualMachineClass
 }
 
-var _ vmoprconversion.ConvertibleWrapper = &VirtualMachineSetResourcePolicyConvertibleWrapper{}
+var _ vmoprconversion.ConvertibleWrapper = &VirtualMachineClassConvertibleWrapper{}
 
-func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) GroupVersionKind() schema.GroupVersionKind {
-	return vmoprv1alpha2.GroupVersion.WithKind("VirtualMachineSetResourcePolicy")
+func (c *VirtualMachineClassConvertibleWrapper) GroupVersionKind() schema.GroupVersionKind {
+	return vmoprv1alpha2.GroupVersion.WithKind("VirtualMachineClass")
 }
 
-func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) Set(objRaw client.Object) {
+func (c *VirtualMachineClassConvertibleWrapper) Set(objRaw client.Object) {
 	// FIXME: Chek what happens if cast fails
-	c.VirtualMachineSetResourcePolicy = objRaw.(*vmoprv1alpha2.VirtualMachineSetResourcePolicy)
+	c.VirtualMachineClass = objRaw.(*vmoprv1alpha2.VirtualMachineClass)
 }
 
-func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub) error {
-	if c.VirtualMachineSetResourcePolicy == nil {
+func (c *VirtualMachineClassConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub) error {
+	if c.VirtualMachineClass == nil {
 		return errors.New("method ConvertTo must be called after calling Set")
 	}
 
-	dst, ok := dstRaw.(*vmoprvhub.VirtualMachineSetResourcePolicy)
+	dst, ok := dstRaw.(*vmoprvhub.VirtualMachineClass)
 	if !ok {
-		return errors.New("dstRaw must be of type *vmoprvhub.VirtualMachineSetResourcePolicy")
+		return errors.New("dstRaw must be of type *vmoprvhub.VirtualMachineClass")
 	}
 
-	src := c.VirtualMachineSetResourcePolicy
+	src := c.VirtualMachineClass
 	dst.ObjectMeta = src.ObjectMeta
 
-	dst.Spec.ClusterModuleGroups = src.Spec.ClusterModuleGroups
-	dst.Spec.Folder = src.Spec.Folder
-	dst.Spec.ResourcePool = vmoprvhub.ResourcePoolSpec{
-		Name: src.Spec.ResourcePool.Name,
+	dst.Spec.Hardware = vmoprvhub.VirtualMachineClassHardware{
+		Cpus:   src.Spec.Hardware.Cpus,
+		Memory: src.Spec.Hardware.Memory,
 	}
 
 	// The hub should keep track of the spoke version it was generated from.
@@ -69,10 +68,10 @@ func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) ConvertTo(dstRaw vmo
 	return nil
 }
 
-func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hub) error {
-	src, ok := srcRaw.(*vmoprvhub.VirtualMachineSetResourcePolicy)
+func (c *VirtualMachineClassConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hub) error {
+	src, ok := srcRaw.(*vmoprvhub.VirtualMachineClass)
 	if !ok {
-		errors.New("srcRaw must be of type *vmoprvhub.VirtualMachineSetResourcePolicy")
+		errors.New("srcRaw must be of type *vmoprvhub.VirtualMachineClass")
 	}
 
 	// Check if the hub is new or it was generated from the spoke version we are converting to.
@@ -80,15 +79,14 @@ func (c *VirtualMachineSetResourcePolicyConvertibleWrapper) ConvertFrom(srcRaw v
 		errors.New("srcRaw must does not have the expected APIVersion") // FIXME:
 	}
 
-	dst := &vmoprv1alpha2.VirtualMachineSetResourcePolicy{}
+	dst := &vmoprv1alpha2.VirtualMachineClass{}
 	dst.ObjectMeta = src.ObjectMeta
 
-	dst.Spec.ClusterModuleGroups = src.Spec.ClusterModuleGroups
-	dst.Spec.Folder = src.Spec.Folder
-	dst.Spec.ResourcePool = vmoprv1alpha2.ResourcePoolSpec{
-		Name: src.Spec.ResourcePool.Name,
+	dst.Spec.Hardware = vmoprv1alpha2.VirtualMachineClassHardware{
+		Cpus:   src.Spec.Hardware.Cpus,
+		Memory: src.Spec.Hardware.Memory,
 	}
 
-	c.VirtualMachineSetResourcePolicy = dst
+	c.VirtualMachineClass = dst
 	return nil
 }

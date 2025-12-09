@@ -19,8 +19,8 @@ package hub
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
-	conversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 // VirtualMachineServiceType string describes ingress methods for a service.
@@ -185,7 +185,7 @@ type VirtualMachineService struct {
 	Status VirtualMachineServiceStatus `json:"status,omitempty"`
 
 	// FIXME: think about name
-	Convertible conversionmeta.TypeMetaConvertible `json:"convertible,omitempty"`
+	Convertible vmoprconversionmeta.TypeMetaConvertible `json:"convertible,omitempty"`
 }
 
 func (s *VirtualMachineService) NamespacedName() string {
@@ -208,14 +208,14 @@ func init() {
 	)
 }
 
-var _ conversion.Hub = &VirtualMachineService{}
+var _ vmoprconversion.Hub = &VirtualMachineService{}
 
-func (vm *VirtualMachineService) Hub() {}
+func (s *VirtualMachineService) Hub() {}
 
-func (vm *VirtualMachineService) SetConvertibleAPIVersion(v string) {
-	vm.Convertible.APIVersion = v
+func (s *VirtualMachineService) SetConvertibleAPIVersion(v string) {
+	s.Convertible.APIVersion = v
 }
 
-func (vm *VirtualMachineService) GetConvertibleAPIVersion() string {
-	return vm.Convertible.APIVersion
+func (s *VirtualMachineService) GetConvertibleAPIVersion() string {
+	return s.Convertible.APIVersion
 }

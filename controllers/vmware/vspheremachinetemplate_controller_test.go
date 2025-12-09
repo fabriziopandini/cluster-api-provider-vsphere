@@ -32,6 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	vmoprconversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 )
 
 func Test_vSphereMachineTemplateReconciler_Reconcile(t *testing.T) {
@@ -41,6 +43,7 @@ func Test_vSphereMachineTemplateReconciler_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	g.Expect(vmwarev1.AddToScheme(scheme)).To(Succeed())
+	g.Expect(vmoprvhub.AddToScheme(scheme)).To(Succeed())
 	g.Expect(vmoprv1.AddToScheme(scheme)).To(Succeed())
 
 	namespace := &corev1.Namespace{
@@ -135,8 +138,9 @@ func Test_vSphereMachineTemplateReconciler_Reconcile(t *testing.T) {
 				},
 			}
 
+			// FIXME: consider if we want to pin preferred version (it must be consistent with the types registered in the schema) or not
 			r := &vSphereMachineTemplateReconciler{
-				Client: fakeClientBuilder.Build(),
+				Client: vmoprconversionclient.New(fakeClientBuilder.Build()),
 			}
 
 			_, err := r.Reconcile(ctx, req)
