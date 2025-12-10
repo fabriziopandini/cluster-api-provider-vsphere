@@ -40,6 +40,8 @@ import (
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	topologyv1 "sigs.k8s.io/cluster-api-provider-vsphere/internal/apis/topology/v1alpha1"
 	capvcontext "sigs.k8s.io/cluster-api-provider-vsphere/pkg/context"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	vmoprconversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 )
 
 // Manager is a CAPV controller manager.
@@ -64,6 +66,7 @@ func New(ctx context.Context, opts Options) (Manager, error) {
 	_ = controlplanev1.AddToScheme(opts.Scheme)
 	_ = bootstrapv1.AddToScheme(opts.Scheme)
 	_ = vmwarev1.AddToScheme(opts.Scheme)
+	_ = vmoprvhub.AddToScheme(opts.Scheme)
 	_ = vmoprv1.AddToScheme(opts.Scheme)
 	_ = ncpv1.AddToScheme(opts.Scheme)
 	_ = netopv1.AddToScheme(opts.Scheme)
@@ -84,7 +87,7 @@ func New(ctx context.Context, opts Options) (Manager, error) {
 		Name:                    opts.PodName,
 		LeaderElectionID:        opts.LeaderElectionID,
 		LeaderElectionNamespace: opts.LeaderElectionNamespace,
-		Client:                  mgr.GetClient(),
+		Client:                  vmoprconversionclient.New(mgr.GetClient()),
 		Logger:                  opts.Logger,
 		Scheme:                  opts.Scheme,
 		Username:                opts.Username,

@@ -26,8 +26,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
-	vmoprv1common "github.com/vmware-tanzu/vm-operator/api/v1alpha2/common"
 	"github.com/vmware/govmomi/pbm"
 	"github.com/vmware/govmomi/vapi/library"
 	"github.com/vmware/govmomi/vapi/rest"
@@ -45,6 +43,7 @@ import (
 
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	topologyv1 "sigs.k8s.io/cluster-api-provider-vsphere/internal/apis/topology/v1alpha1"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/session"
 	vcsimv1 "sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/api/v1alpha1"
 )
@@ -421,13 +420,13 @@ func ReconcileDependencies(ctx context.Context, c client.Client, dependenciesCon
 
 	// Create VirtualMachineClass in K8s
 	for _, vmc := range config.Spec.VirtualMachineClasses {
-		vmClass := &vmoprv1.VirtualMachineClass{
+		vmClass := &vmoprvhub.VirtualMachineClass{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vmc.Name,
 				Namespace: config.Namespace,
 			},
-			Spec: vmoprv1.VirtualMachineClassSpec{
-				Hardware: vmoprv1.VirtualMachineClassHardware{
+			Spec: vmoprvhub.VirtualMachineClassSpec{
+				Hardware: vmoprvhub.VirtualMachineClassHardware{
 					Cpus:   vmc.Cpus,
 					Memory: vmc.Memory,
 				},
@@ -528,13 +527,13 @@ func ReconcileDependencies(ctx context.Context, c client.Client, dependenciesCon
 			libraryItemID = id
 		}
 
-		virtualMachineImage := &vmoprv1.VirtualMachineImage{
+		virtualMachineImage := &vmoprvhub.VirtualMachineImage{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      libraryItem.Name,
 				Namespace: config.Namespace,
 			},
-			Spec: vmoprv1.VirtualMachineImageSpec{
-				ProviderRef: vmoprv1common.LocalObjectRef{
+			Spec: vmoprvhub.VirtualMachineImageSpec{
+				ProviderRef: &vmoprvhub.LocalObjectRef{
 					Kind: "ContentLibraryItem",
 				},
 			},
@@ -563,10 +562,10 @@ func ReconcileDependencies(ctx context.Context, c client.Client, dependenciesCon
 		virtualMachineImageReconciled := virtualMachineImage.DeepCopy()
 		virtualMachineImageReconciled.Status.Name = virtualMachineImage.Name
 		virtualMachineImageReconciled.Status.ProviderItemID = libraryItemID
-		virtualMachineImageReconciled.Status.ProductInfo = vmoprv1.VirtualMachineImageProductInfo{
+		virtualMachineImageReconciled.Status.ProductInfo = vmoprvhub.VirtualMachineImageProductInfo{
 			FullVersion: item.ProductInfo,
 		}
-		virtualMachineImageReconciled.Status.OSInfo = vmoprv1.VirtualMachineImageOSInfo{
+		virtualMachineImageReconciled.Status.OSInfo = vmoprvhub.VirtualMachineImageOSInfo{
 			Type: item.OSInfo,
 		}
 		meta.SetStatusCondition(&virtualMachineImageReconciled.Status.Conditions, metav1.Condition{

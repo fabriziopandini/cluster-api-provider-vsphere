@@ -42,6 +42,7 @@ import (
 	capvcontext "sigs.k8s.io/cluster-api-provider-vsphere/pkg/context"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	vmoprconversionutil "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/util"
 	infrautilv1 "sigs.k8s.io/cluster-api-provider-vsphere/pkg/util"
 )
 
@@ -401,7 +402,7 @@ func (v *VmopMachineService) reconcileVMOperatorVM(ctx context.Context, supervis
 		minHardwareVersion = int32(hwVersion)
 	}
 
-	_, err := ctrlutil.CreateOrPatch(ctx, v.Client, vmOperatorVM, func() error {
+	_, err := vmoprconversionutil.CreateOrPatch(ctx, v.Client, vmOperatorVM, func() error {
 		// Define a new VM Operator virtual machine.
 		// NOTE: Set field-by-field in order to preserve changes made directly
 		//  to the VirtualMachine spec by other sources (e.g. the cloud provider)

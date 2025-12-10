@@ -60,108 +60,88 @@ func (c conversionClient) Get(ctx context.Context, key client.ObjectKey, obj cli
 		return c.internalClient.Get(ctx, key, obj, opts...)
 	}
 
-	hubObj, ok := obj.(vmoprconversion.Hub)
-	if !ok {
-		return errors.New("obj must implement conversion.Hub")
-	}
-
 	preferredVersion := c.preferredVersion()
 	converter, err := converterFor(gvk, preferredVersion)
 	if err != nil {
 		return err
 	}
 
-	vObjRaw, err := c.internalClient.Scheme().New(converter.GroupVersionKind())
+	spokeObj, err := c.newObj(converter.GroupVersionKind())
 	if err != nil {
 		return err
 	}
 
-	vObj, ok := vObjRaw.(client.Object)
-	if !ok {
-		// FIXME
-	}
-
-	if err := c.internalClient.Get(ctx, key, vObj, opts...); err != nil {
+	if err := c.internalClient.Get(ctx, key, spokeObj, opts...); err != nil {
 		return err
 	}
-
-	converter.Set(vObj)
-	return converter.ConvertTo(hubObj)
+	return converter.ConvertTo(spokeObj, obj)
 }
 
 func (c conversionClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	gvkList, err := c.GroupVersionKindFor(list)
+	hubListGVK, err := c.GroupVersionKindFor(list)
 	if err != nil {
 		return err
 	}
 
-	if !conversionRequired(gvkList) {
+	if !conversionRequired(hubListGVK) {
 		return c.internalClient.List(ctx, list, opts...)
 	}
 
 	// FIXME: check suffix
-	gvkItem := schema.GroupVersionKind{
-		Group:   gvkList.Group,
-		Version: gvkList.Version,
-		Kind:    strings.TrimSuffix(gvkList.Kind, "List"),
+	hubItemGVK := schema.GroupVersionKind{
+		Group:   hubListGVK.Group,
+		Version: hubListGVK.Version,
+		Kind:    strings.TrimSuffix(hubListGVK.Kind, "List"),
 	}
 
-	// FIXME: think about how to pass explicit convertible version (field? option?)
 	preferredVersion := c.preferredVersion()
-	converter, err := converterFor(gvkItem, preferredVersion)
+	converter, err := converterFor(hubItemGVK, preferredVersion)
 	if err != nil {
 		return err
 	}
 
-	gvkVItem := converter.GroupVersionKind()
-	gvkVList := schema.GroupVersionKind{
-		Group:   gvkVItem.Group,
-		Version: gvkVItem.Version,
-		Kind:    fmt.Sprintf("%sList", gvkVItem.Kind),
+	spokeItemGVK := converter.GroupVersionKind()
+	spokeItemList := schema.GroupVersionKind{
+		Group:   spokeItemGVK.Group,
+		Version: spokeItemGVK.Version,
+		Kind:    fmt.Sprintf("%sList", spokeItemGVK.Kind),
 	}
 
-	vListRaw, err := c.internalClient.Scheme().New(gvkVList)
+	spokeListRaw, err := c.internalClient.Scheme().New(spokeItemList)
 	if err != nil {
 		return err
 	}
 
-	vList, ok := vListRaw.(client.ObjectList)
+	spokeList, ok := spokeListRaw.(client.ObjectList)
 	if !ok {
-		// FIXME
+		return errors.Errorf("%T does not implement client.ObjectList", spokeList)
 	}
 
-	if err := c.internalClient.List(ctx, vList, opts...); err != nil {
+	if err := c.internalClient.List(ctx, spokeList, opts...); err != nil {
 		return err
 	}
 
-	vItems, err := meta.ExtractList(vList)
+	spokeItems, err := meta.ExtractList(spokeList)
 	if err != nil {
 		return err
 	}
 
 	listObjs := []runtime.Object{}
-	for _, vItemRaw := range vItems {
-		vItem, ok := vItemRaw.(client.Object)
+	for _, spokeItemRaw := range spokeItems {
+		spokeItem, ok := spokeItemRaw.(client.Object)
 		if !ok {
-			// FIXME
+			return errors.Errorf("%T does not implement client.Object", spokeItemRaw)
 		}
-		converter.Set(vItem)
 
-		hubRaw, err := c.internalClient.Scheme().New(gvkItem)
+		hubItem, err := c.newObj(hubItemGVK)
 		if err != nil {
 			return err
 		}
 
-		hubObj, ok := hubRaw.(vmoprconversion.Hub)
-		if !ok {
-			return errors.New("list.Items must implement conversion.Hub")
-		}
-
-		converter.Set(vItem)
-		if converter.ConvertTo(hubObj); err != nil {
+		if converter.ConvertTo(spokeItem, hubItem); err != nil {
 			return err
 		}
-		listObjs = append(listObjs, hubObj)
+		listObjs = append(listObjs, hubItem)
 	}
 
 	if meta.SetList(list, listObjs); err != nil {
@@ -176,50 +156,146 @@ func (c conversionClient) Apply(ctx context.Context, obj runtime.ApplyConfigurat
 }
 
 func (c conversionClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-
-	// convert from hub type to vm-operator preferred version.
-
-	// Create
-
-	// convert from vm-operator preferred version to hub version.
-
-	// FIXME
-	panic("implement me")
-}
-
-func (c conversionClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-	// FIXME
-	panic("implement me")
-}
-
-func (c conversionClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	// FIXME
-	panic("implement me")
-}
-
-func (c conversionClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-
-	// convert from hub type to vm-operator preferred version.
-
-	// Create
-
-	// convert from vm-operator preferred version to hub version.
-
-	panic("implement me")
-}
-
-func (c conversionClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
-	gvkList, err := c.GroupVersionKindFor(obj)
+	gvk, err := c.GroupVersionKindFor(obj)
 	if err != nil {
 		return err
 	}
 
-	if !conversionRequired(gvkList) {
+	if !conversionRequired(gvk) {
+		return c.internalClient.Create(ctx, obj, opts...)
+	}
+
+	preferredVersion := c.preferredVersion()
+	converter, err := converterFor(gvk, preferredVersion)
+	if err != nil {
+		return err
+	}
+
+	spokeObj, err := c.newObj(converter.GroupVersionKind())
+	if err != nil {
+		return err
+	}
+	if err := converter.ConvertFrom(obj, spokeObj); err != nil {
+		return err
+	}
+
+	if err := c.internalClient.Create(ctx, spokeObj, opts...); err != nil {
+		return err
+	}
+	return converter.ConvertTo(spokeObj, obj)
+}
+
+func (c conversionClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	gvk, err := c.GroupVersionKindFor(obj)
+	if err != nil {
+		return err
+	}
+
+	if !conversionRequired(gvk) {
+		return c.internalClient.Delete(ctx, obj, opts...)
+	}
+
+	preferredVersion := c.preferredVersion()
+	converter, err := converterFor(gvk, preferredVersion)
+	if err != nil {
+		return err
+	}
+
+	spokeObj, err := c.newObj(converter.GroupVersionKind())
+	if err != nil {
+		return err
+	}
+	if err := converter.ConvertFrom(obj, spokeObj); err != nil {
+		return err
+	}
+
+	if err := c.internalClient.Delete(ctx, spokeObj, opts...); err != nil {
+		return err
+	}
+	return converter.ConvertTo(spokeObj, obj)
+}
+
+func (c conversionClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	gvk, err := c.GroupVersionKindFor(obj)
+	if err != nil {
+		return err
+	}
+
+	if !conversionRequired(gvk) {
+		return c.internalClient.Update(ctx, obj, opts...)
+	}
+
+	panic("implement me")
+}
+
+func (c conversionClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	gvk, err := c.GroupVersionKindFor(obj)
+	if err != nil {
+		return err
+	}
+
+	if !conversionRequired(gvk) {
+		return c.internalClient.Patch(ctx, obj, patch, opts...)
+	}
+
+	preferredVersion := c.preferredVersion()
+	converter, err := converterFor(gvk, preferredVersion)
+	if err != nil {
+		return err
+	}
+
+	spokeObj, err := c.newObj(converter.GroupVersionKind())
+	if err != nil {
+		return err
+	}
+	if err := converter.ConvertFrom(obj, spokeObj); err != nil {
+		return err
+	}
+
+	hubPatch, ok := patch.(Patch)
+	if !ok {
+		return errors.Errorf("%T does not implement conversion.client.Patch", patch)
+	}
+
+	spokePatch, err := hubPatch.ConversionPatch(c.internalClient.Scheme(), converter)
+	if err != nil {
+		return err
+	}
+
+	if err := c.internalClient.Patch(ctx, spokeObj, spokePatch, opts...); err != nil {
+		return err
+	}
+	return converter.ConvertTo(spokeObj, obj)
+}
+
+func (c conversionClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	gvk, err := c.GroupVersionKindFor(obj)
+	if err != nil {
+		return err
+	}
+
+	if !conversionRequired(gvk) {
 		return c.internalClient.DeleteAllOf(ctx, obj, opts...)
 	}
 
-	// CAPV never use DeleteAllOf.
-	panic("not implemented")
+	preferredVersion := c.preferredVersion()
+	converter, err := converterFor(gvk, preferredVersion)
+	if err != nil {
+		return err
+	}
+
+	spokeObj, err := c.newObj(converter.GroupVersionKind())
+	if err != nil {
+		return err
+	}
+	if err := converter.ConvertFrom(obj, spokeObj); err != nil {
+		return err
+	}
+
+	if err := c.internalClient.DeleteAllOf(ctx, spokeObj, opts...); err != nil {
+		return err
+	}
+	return converter.ConvertTo(spokeObj, obj)
 }
 
 func (c conversionClient) Status() client.SubResourceWriter {
@@ -228,7 +304,6 @@ func (c conversionClient) Status() client.SubResourceWriter {
 }
 
 func (c conversionClient) SubResource(subResource string) client.SubResourceClient {
-	// FIXME: looks like there is no way to prevent this for the hub version (not sure we have / want to block)
 	return c.internalClient.SubResource(subResource)
 }
 
@@ -253,7 +328,7 @@ func (c conversionClient) preferredVersion() string {
 		return c.overrideGetPreferredVersion()
 	}
 
-	// FIXME
+	// FIXME: Add the logic to detect the resource version in a live system.
 	return vmoprv1alpha2.GroupVersion.Version
 }
 
@@ -265,6 +340,7 @@ func conversionRequired(gvk schema.GroupVersionKind) bool {
 	return false
 }
 
+// FIXME: implement test to check all the GVK/preferred versions have a converter
 func converterFor(gvk schema.GroupVersionKind, preferredVersion string) (vmoprconversion.ConvertibleWrapper, error) {
 	switch preferredVersion {
 	case vmoprv1alpha2.GroupVersion.Version:
@@ -273,6 +349,8 @@ func converterFor(gvk schema.GroupVersionKind, preferredVersion string) (vmoprco
 			return &vmoprv1alpha2conversion.VirtualMachineConvertibleWrapper{}, nil
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachineClass"):
 			return &vmoprv1alpha2conversion.VirtualMachineClassConvertibleWrapper{}, nil
+		case vmoprvhub.GroupVersion.WithKind("VirtualMachineImage"):
+			return &vmoprv1alpha2conversion.VirtualMachineImageConvertibleWrapper{}, nil
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachineService"):
 			return &vmoprv1alpha2conversion.VirtualMachineServiceConvertibleWrapper{}, nil
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachineSetResourcePolicy"):
@@ -284,11 +362,26 @@ func converterFor(gvk schema.GroupVersionKind, preferredVersion string) (vmoprco
 			return &vmoprv1alpha5conversion.VirtualMachineConvertibleWrapper{}, nil
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachineClass"):
 			return &vmoprv1alpha5conversion.VirtualMachineClassConvertibleWrapper{}, nil
+		case vmoprvhub.GroupVersion.WithKind("VirtualMachineImage"):
+			return &vmoprv1alpha5conversion.VirtualMachineImageConvertibleWrapper{}, nil
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachineService"):
 			return &vmoprv1alpha5conversion.VirtualMachineServiceConvertibleWrapper{}, nil
 		case vmoprvhub.GroupVersion.WithKind("VirtualMachineSetResourcePolicy"):
 			return &vmoprv1alpha5conversion.VirtualMachineSetResourcePolicyConvertibleWrapper{}, nil
 		}
 	}
-	return nil, errors.Errorf("unsupported GroupVersionKind: %s", gvk)
+	return nil, errors.Errorf("can't find a converter for %s", gvk)
+}
+
+func (c conversionClient) newObj(gvk schema.GroupVersionKind) (client.Object, error) {
+	vObjRaw, err := c.internalClient.Scheme().New(gvk)
+	if err != nil {
+		return nil, err
+	}
+
+	vObj, ok := vObjRaw.(client.Object)
+	if !ok {
+		return nil, errors.Errorf("%T does not implement client.Object", vObjRaw)
+	}
+	return vObj, nil
 }

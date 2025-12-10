@@ -59,6 +59,8 @@ import (
 	infrav1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	topologyv1 "sigs.k8s.io/cluster-api-provider-vsphere/internal/apis/topology/v1alpha1"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	vmoprconversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 	vcsimv1 "sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/api/v1alpha1"
 	"sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/controllers"
 )
@@ -100,6 +102,7 @@ func init() {
 	_ = infrav1.AddToScheme(scheme)
 	_ = vcsimv1.AddToScheme(scheme)
 	_ = topologyv1.AddToScheme(scheme)
+	_ = vmoprvhub.AddToScheme(scheme)
 	_ = vmoprv1.AddToScheme(scheme)
 	_ = storagev1.AddToScheme(scheme)
 	_ = vmwarev1.AddToScheme(scheme)
@@ -352,7 +355,7 @@ func setupReconcilers(ctx context.Context, mgr ctrl.Manager, supervisorMode bool
 
 	if supervisorMode {
 		if err := (&controllers.VirtualMachineReconciler{
-			Client:           mgr.GetClient(),
+			Client:           vmoprconversionclient.New(mgr.GetClient()),
 			InMemoryManager:  inmemoryManager,
 			APIServerMux:     apiServerMux,
 			WatchFilterValue: watchFilterValue,

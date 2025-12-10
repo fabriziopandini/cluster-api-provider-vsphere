@@ -43,6 +43,7 @@ import (
 	infrav1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	vcsimhelpers "sigs.k8s.io/cluster-api-provider-vsphere/internal/test/helpers/vcsim"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/session"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/util"
 	"sigs.k8s.io/cluster-api-provider-vsphere/test/framework/vmoperator"
@@ -70,7 +71,7 @@ func (r *VirtualMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the VirtualMachine instance
-	virtualMachine := &vmoprv1.VirtualMachine{}
+	virtualMachine := &vmoprvhub.VirtualMachine{}
 	if err := r.Client.Get(ctx, req.NamespacedName, virtualMachine); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -199,7 +200,7 @@ func (r *VirtualMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// track of the provisioning process of the fake node, etcd, api server, etc for this specific virtualMachine.
 	// (the process managed by this controller).
 	// NOTE: The type of the in memory conditionsTracker object doesn't matter as soon as it implements Cluster API's conditions interfaces.
-	// Unfortunately vmoprv1.VirtualMachine isn't a condition getter, so we fallback on using a infrav1.VSphereVM.
+	// Unfortunately vmoprvhub.VirtualMachine isn't a condition getter, so we fallback on using a infrav1.VSphereVM.
 	conditionsTracker := &infrav1.VSphereVM{}
 	if err := inmemoryClient.Get(ctx, client.ObjectKeyFromObject(virtualMachine), conditionsTracker); err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -245,7 +246,7 @@ func (r *VirtualMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return r.reconcileNormal(ctx, cluster, machine, virtualMachine, conditionsTracker)
 }
 
-func (r *VirtualMachineReconciler) reconcileNormal(ctx context.Context, cluster *clusterv1beta1.Cluster, machine *clusterv1beta1.Machine, virtualMachine *vmoprv1.VirtualMachine, conditionsTracker *infrav1.VSphereVM) (ctrl.Result, error) {
+func (r *VirtualMachineReconciler) reconcileNormal(ctx context.Context, cluster *clusterv1beta1.Cluster, machine *clusterv1beta1.Machine, virtualMachine *vmoprvhub.VirtualMachine, conditionsTracker *infrav1.VSphereVM) (ctrl.Result, error) {
 	ipReconciler := r.getVMIpReconciler(cluster, virtualMachine)
 	if ret, err := ipReconciler.ReconcileIP(ctx); !ret.IsZero() || err != nil {
 		return ret, err
@@ -259,7 +260,7 @@ func (r *VirtualMachineReconciler) reconcileNormal(ctx context.Context, cluster 
 	return ctrl.Result{}, nil
 }
 
-func (r *VirtualMachineReconciler) reconcileDelete(ctx context.Context, cluster *clusterv1beta1.Cluster, machine *clusterv1beta1.Machine, virtualMachine *vmoprv1.VirtualMachine, conditionsTracker *infrav1.VSphereVM) (ctrl.Result, error) {
+func (r *VirtualMachineReconciler) reconcileDelete(ctx context.Context, cluster *clusterv1beta1.Cluster, machine *clusterv1beta1.Machine, virtualMachine *vmoprvhub.VirtualMachine, conditionsTracker *infrav1.VSphereVM) (ctrl.Result, error) {
 	bootstrapReconciler := r.getVMBootstrapReconciler(virtualMachine)
 	if ret, err := bootstrapReconciler.reconcileDelete(ctx, cluster, machine, conditionsTracker); !ret.IsZero() || err != nil {
 		return ret, err
@@ -269,7 +270,7 @@ func (r *VirtualMachineReconciler) reconcileDelete(ctx context.Context, cluster 
 	return ctrl.Result{}, nil
 }
 
-func (r *VirtualMachineReconciler) getVMIpReconciler(cluster *clusterv1beta1.Cluster, virtualMachine *vmoprv1.VirtualMachine) *vmIPReconciler {
+func (r *VirtualMachineReconciler) getVMIpReconciler(cluster *clusterv1beta1.Cluster, virtualMachine *vmoprvhub.VirtualMachine) *vmIPReconciler {
 	return &vmIPReconciler{
 		Client: r.Client,
 
@@ -281,7 +282,7 @@ func (r *VirtualMachineReconciler) getVMIpReconciler(cluster *clusterv1beta1.Clu
 		},
 		IsVMWaitingforIP: func() bool {
 			// A virtualMachine is waiting for an IP when PoweredOn but without an Ip.
-			return virtualMachine.Status.PowerState == vmoprv1.VirtualMachinePowerStateOn && (virtualMachine.Status.Network == nil || (virtualMachine.Status.Network.PrimaryIP4 == "" && virtualMachine.Status.Network.PrimaryIP6 == ""))
+			return virtualMachine.Status.PowerState == vmoprvhub.VirtualMachinePowerStateOn && (virtualMachine.Status.Network == nil || (virtualMachine.Status.Network.PrimaryIP4 == "" && virtualMachine.Status.Network.PrimaryIP6 == ""))
 		},
 		GetVMPath: func() string {
 			// The vm operator always create VMs under a sub-folder with named like the cluster.
@@ -291,7 +292,7 @@ func (r *VirtualMachineReconciler) getVMIpReconciler(cluster *clusterv1beta1.Clu
 	}
 }
 
-func (r *VirtualMachineReconciler) getVMBootstrapReconciler(virtualMachine *vmoprv1.VirtualMachine) *vmBootstrapReconciler {
+func (r *VirtualMachineReconciler) getVMBootstrapReconciler(virtualMachine *vmoprvhub.VirtualMachine) *vmBootstrapReconciler {
 	return &vmBootstrapReconciler{
 		Client:          r.Client,
 		InMemoryManager: r.InMemoryManager,
@@ -301,7 +302,7 @@ func (r *VirtualMachineReconciler) getVMBootstrapReconciler(virtualMachine *vmop
 		// thus allowing to use the same vmBootstrapReconciler in both scenarios.
 		IsVMReady: func() bool {
 			// A virtualMachine is ready to provision fake objects hosted on it when PoweredOn, with a primary Ip assigned and BiosUUID is set (bios id is required when provisioning the node to compute the Provider ID).
-			return virtualMachine.Status.PowerState == vmoprv1.VirtualMachinePowerStateOn && virtualMachine.Status.Network != nil && (virtualMachine.Status.Network.PrimaryIP4 != "" || virtualMachine.Status.Network.PrimaryIP6 != "") && virtualMachine.Status.BiosUUID != ""
+			return virtualMachine.Status.PowerState == vmoprvhub.VirtualMachinePowerStateOn && virtualMachine.Status.Network != nil && (virtualMachine.Status.Network.PrimaryIP4 != "" || virtualMachine.Status.Network.PrimaryIP6 != "") && virtualMachine.Status.BiosUUID != ""
 		},
 		GetProviderID: func() string {
 			// Computes the ProviderID for the node hosted on the virtualMachine

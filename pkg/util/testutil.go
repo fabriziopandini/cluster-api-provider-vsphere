@@ -33,6 +33,8 @@ import (
 	topologyv1 "sigs.k8s.io/cluster-api-provider-vsphere/internal/apis/topology/v1alpha1"
 	capvcontext "sigs.k8s.io/cluster-api-provider-vsphere/pkg/context"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	vmoprconversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 )
 
 const (
@@ -146,6 +148,7 @@ func createScheme() *runtime.Scheme {
 	_ = vmwarev1.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
 	_ = topologyv1.AddToScheme(scheme)
+	_ = vmoprvhub.AddToScheme(scheme)
 	_ = vmoprv1.AddToScheme(scheme)
 	_ = netopv1.AddToScheme(scheme)
 	_ = ncpv1.AddToScheme(scheme)
@@ -162,10 +165,12 @@ func CreateClusterContext(cluster *clusterv1.Cluster, vsphereCluster *vmwarev1.V
 		}, &capvcontext.ControllerManagerContext{
 			Logger: klog.Background().WithName("controller-manager-logger"),
 			Scheme: scheme,
-			Client: fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(
+			Client: vmoprconversionclient.New(fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(
+				&vmoprvhub.VirtualMachineService{},
+				&vmoprvhub.VirtualMachine{},
 				&vmoprv1.VirtualMachineService{},
 				&vmoprv1.VirtualMachine{},
-			).Build(),
+			).Build()),
 		}
 }
 

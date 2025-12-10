@@ -20,17 +20,15 @@ import "C"
 import (
 	"github.com/pkg/errors"
 	vmoprv1alpha5 "github.com/vmware-tanzu/vm-operator/api/v1alpha5"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
-type VirtualMachineServiceConvertibleWrapper struct {
-	*vmoprv1alpha5.VirtualMachineService
-}
+type VirtualMachineServiceConvertibleWrapper struct{}
 
 var _ vmoprconversion.ConvertibleWrapper = &VirtualMachineServiceConvertibleWrapper{}
 
@@ -38,22 +36,17 @@ func (c *VirtualMachineServiceConvertibleWrapper) GroupVersionKind() schema.Grou
 	return vmoprv1alpha5.GroupVersion.WithKind("VirtualMachineService")
 }
 
-func (c *VirtualMachineServiceConvertibleWrapper) Set(objRaw client.Object) {
-	// FIXME: Chek what happens if cast fails
-	c.VirtualMachineService = objRaw.(*vmoprv1alpha5.VirtualMachineService)
-}
-
-func (c *VirtualMachineServiceConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub) error {
-	if c.VirtualMachineService == nil {
-		return errors.New("method ConvertTo must be called after calling Set")
+func (c *VirtualMachineServiceConvertibleWrapper) ConvertTo(srcRaw runtime.Object, dstRaw runtime.Object) error {
+	src, ok := srcRaw.(*vmoprv1alpha5.VirtualMachineService)
+	if !ok {
+		return errors.Errorf("src object must be of type %T, got %T", &vmoprv1alpha5.VirtualMachineService{}, srcRaw)
 	}
 
 	dst, ok := dstRaw.(*vmoprvhub.VirtualMachineService)
 	if !ok {
-		return errors.New("dstRaw must be of type *vmoprvhub.VirtualMachineService")
+		return errors.Errorf("dst object must be of type %T, got %T", &vmoprvhub.VirtualMachineService{}, dstRaw)
 	}
 
-	src := c.VirtualMachineService
 	dst.ObjectMeta = src.ObjectMeta
 
 	if src.Spec.Ports != nil {
@@ -86,18 +79,22 @@ func (c *VirtualMachineServiceConvertibleWrapper) ConvertTo(dstRaw vmoprconversi
 	return nil
 }
 
-func (c *VirtualMachineServiceConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hub) error {
+func (c *VirtualMachineServiceConvertibleWrapper) ConvertFrom(srcRaw runtime.Object, dstRaw runtime.Object) error {
 	src, ok := srcRaw.(*vmoprvhub.VirtualMachineService)
 	if !ok {
-		errors.New("srcRaw must be of type *vmoprvhub.VirtualMachineService")
+		return errors.Errorf("src object must be of type %T, got %T", &vmoprvhub.VirtualMachineService{}, srcRaw)
 	}
 
 	// Check if the hub is new or it was generated from the spoke version we are converting to.
 	if src.Convertible.APIVersion != "" && src.Convertible.APIVersion != c.GroupVersionKind().GroupVersion().String() {
-		errors.New("srcRaw must does not have the expected APIVersion") // FIXME:
+		errors.Errorf("src object originated from %s, it can't be converted to %s", src.Convertible.APIVersion, c.GroupVersionKind().GroupVersion().String())
 	}
 
-	dst := &vmoprv1alpha5.VirtualMachineService{}
+	dst, ok := dstRaw.(*vmoprv1alpha5.VirtualMachineService)
+	if !ok {
+		return errors.Errorf("dst object must be of type %T, got %T", &vmoprv1alpha5.VirtualMachineService{}, dstRaw)
+	}
+
 	dst.ObjectMeta = src.ObjectMeta
 
 	if src.Spec.Ports != nil {
@@ -123,6 +120,5 @@ func (c *VirtualMachineServiceConvertibleWrapper) ConvertFrom(srcRaw vmoprconver
 		}
 	}
 
-	c.VirtualMachineService = dst
 	return nil
 }

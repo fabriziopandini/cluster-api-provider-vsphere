@@ -23,18 +23,16 @@ import (
 	vmoprv1alpha5common "github.com/vmware-tanzu/vm-operator/api/v1alpha5/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
-type VirtualMachineConvertibleWrapper struct {
-	*vmoprv1alpha5.VirtualMachine
-}
+type VirtualMachineConvertibleWrapper struct{}
 
 var _ vmoprconversion.ConvertibleWrapper = &VirtualMachineConvertibleWrapper{}
 
@@ -42,22 +40,17 @@ func (c *VirtualMachineConvertibleWrapper) GroupVersionKind() schema.GroupVersio
 	return vmoprv1alpha5.GroupVersion.WithKind("VirtualMachine")
 }
 
-func (c *VirtualMachineConvertibleWrapper) Set(objRaw client.Object) {
-	// FIXME: Chek what happens if cast fails
-	c.VirtualMachine = objRaw.(*vmoprv1alpha5.VirtualMachine)
-}
-
-func (c *VirtualMachineConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub) error {
-	if c.VirtualMachine == nil {
-		return errors.New("method ConvertTo must be called after calling Set")
+func (c *VirtualMachineConvertibleWrapper) ConvertTo(srcRaw runtime.Object, dstRaw runtime.Object) error {
+	src, ok := srcRaw.(*vmoprv1alpha5.VirtualMachine)
+	if !ok {
+		return errors.Errorf("src object must be of type %T, got %T", &vmoprv1alpha5.VirtualMachine{}, srcRaw)
 	}
 
 	dst, ok := dstRaw.(*vmoprvhub.VirtualMachine)
 	if !ok {
-		return errors.New("dstRaw must be of type *vmoprvhub.VirtualMachine")
+		return errors.Errorf("dst object must be of type %T, got %T", &vmoprvhub.VirtualMachine{}, dstRaw)
 	}
 
-	src := c.VirtualMachine
 	dst.ObjectMeta = src.ObjectMeta
 	if src.Spec.Bootstrap != nil {
 		dst.Spec.Bootstrap = &vmoprvhub.VirtualMachineBootstrapSpec{}
@@ -143,6 +136,12 @@ func (c *VirtualMachineConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub)
 	}
 
 	dst.Status.BiosUUID = src.Status.BiosUUID
+	if src.Status.Conditions != nil {
+		dst.Status.Conditions = []metav1.Condition{}
+		for _, condition := range src.Status.Conditions {
+			dst.Status.Conditions = append(dst.Status.Conditions, condition)
+		}
+	}
 	// FIXME: dst.Status.Host =
 	if src.Status.Network != nil {
 		dst.Status.Network = &vmoprvhub.VirtualMachineNetworkStatus{}
@@ -161,6 +160,51 @@ func (c *VirtualMachineConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub)
 					}
 				}
 				if iface.IP != nil {
+					d.IP = &vmoprvhub.VirtualMachineNetworkInterfaceIPStatus{
+						MACAddr: iface.IP.MACAddr,
+					}
+					if iface.IP.Addresses != nil {
+						d.IP.Addresses = []vmoprvhub.VirtualMachineNetworkInterfaceIPAddrStatus{}
+						for _, addr := range iface.IP.Addresses {
+							d.IP.Addresses = append(d.IP.Addresses, vmoprvhub.VirtualMachineNetworkInterfaceIPAddrStatus{
+								Address:  addr.Address,
+								Lifetime: addr.Lifetime,
+								Origin:   addr.Origin,
+								State:    addr.State,
+							})
+						}
+					}
+					if iface.IP.AutoConfigurationEnabled != nil {
+						d.IP.AutoConfigurationEnabled = ptr.To(*iface.IP.AutoConfigurationEnabled)
+					}
+					if iface.IP.DHCP != nil {
+						d.IP.DHCP = &vmoprvhub.VirtualMachineNetworkDHCPStatus{
+							IP4: vmoprvhub.VirtualMachineNetworkDHCPOptionsStatus{
+								Enabled: iface.IP.DHCP.IP4.Enabled,
+							},
+							IP6: vmoprvhub.VirtualMachineNetworkDHCPOptionsStatus{
+								Enabled: iface.IP.DHCP.IP6.Enabled,
+							},
+						}
+						if iface.IP.DHCP.IP4.Config != nil {
+							d.IP.DHCP.IP4.Config = []vmoprvhub.KeyValuePair{}
+							for _, pair := range iface.IP.DHCP.IP4.Config {
+								d.IP.DHCP.IP4.Config = append(d.IP.DHCP.IP4.Config, vmoprvhub.KeyValuePair{
+									Key:   pair.Key,
+									Value: pair.Value,
+								})
+							}
+						}
+						if iface.IP.DHCP.IP6.Config != nil {
+							d.IP.DHCP.IP6.Config = []vmoprvhub.KeyValuePair{}
+							for _, pair := range iface.IP.DHCP.IP6.Config {
+								d.IP.DHCP.IP6.Config = append(d.IP.DHCP.IP6.Config, vmoprvhub.KeyValuePair{
+									Key:   pair.Key,
+									Value: pair.Value,
+								})
+							}
+						}
+					}
 				}
 				d.Name = iface.Name
 				dst.Status.Network.Interfaces = append(dst.Status.Network.Interfaces, d)
@@ -178,18 +222,22 @@ func (c *VirtualMachineConvertibleWrapper) ConvertTo(dstRaw vmoprconversion.Hub)
 	return nil
 }
 
-func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hub) error {
+func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw runtime.Object, dstRaw runtime.Object) error {
 	src, ok := srcRaw.(*vmoprvhub.VirtualMachine)
 	if !ok {
-		errors.New("srcRaw must be of type *vmoprvhub.VirtualMachine")
+		return errors.Errorf("src object must be of type %T, got %T", &vmoprvhub.VirtualMachine{}, srcRaw)
 	}
 
 	// Check if the hub is new or it was generated from the spoke version we are converting to.
 	if src.Convertible.APIVersion != "" && src.Convertible.APIVersion != c.GroupVersionKind().GroupVersion().String() {
-		errors.New("srcRaw must does not have the expected APIVersion") // FIXME:
+		errors.Errorf("src object originated from %s, it can't be converted to %s", src.Convertible.APIVersion, c.GroupVersionKind().GroupVersion().String())
 	}
 
-	dst := &vmoprv1alpha5.VirtualMachine{}
+	dst, ok := dstRaw.(*vmoprv1alpha5.VirtualMachine)
+	if !ok {
+		return errors.Errorf("dst object must be of type %T, got %T", &vmoprv1alpha5.VirtualMachine{}, dstRaw)
+	}
+
 	dst.ObjectMeta = src.ObjectMeta
 	if src.Spec.Bootstrap != nil {
 		dst.Spec.Bootstrap = &vmoprv1alpha5.VirtualMachineBootstrapSpec{}
@@ -270,7 +318,14 @@ func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hu
 			dst.Spec.Volumes = append(dst.Spec.Volumes, v)
 		}
 	}
+
 	dst.Status.BiosUUID = src.Status.BiosUUID
+	if src.Status.Conditions != nil {
+		dst.Status.Conditions = []metav1.Condition{}
+		for _, condition := range src.Status.Conditions {
+			dst.Status.Conditions = append(dst.Status.Conditions, condition)
+		}
+	}
 	// FIXME: dst.Status.Host =
 	if src.Status.Network != nil {
 		dst.Status.Network = &vmoprv1alpha5.VirtualMachineNetworkStatus{}
@@ -289,6 +344,51 @@ func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hu
 					}
 				}
 				if iface.IP != nil {
+					d.IP = &vmoprv1alpha5.VirtualMachineNetworkInterfaceIPStatus{
+						MACAddr: iface.IP.MACAddr,
+					}
+					if iface.IP.Addresses != nil {
+						d.IP.Addresses = []vmoprv1alpha5.VirtualMachineNetworkInterfaceIPAddrStatus{}
+						for _, addr := range iface.IP.Addresses {
+							d.IP.Addresses = append(d.IP.Addresses, vmoprv1alpha5.VirtualMachineNetworkInterfaceIPAddrStatus{
+								Address:  addr.Address,
+								Lifetime: addr.Lifetime,
+								Origin:   addr.Origin,
+								State:    addr.State,
+							})
+						}
+					}
+					if iface.IP.AutoConfigurationEnabled != nil {
+						d.IP.AutoConfigurationEnabled = ptr.To(*iface.IP.AutoConfigurationEnabled)
+					}
+					if iface.IP.DHCP != nil {
+						d.IP.DHCP = &vmoprv1alpha5.VirtualMachineNetworkDHCPStatus{
+							IP4: vmoprv1alpha5.VirtualMachineNetworkDHCPOptionsStatus{
+								Enabled: iface.IP.DHCP.IP4.Enabled,
+							},
+							IP6: vmoprv1alpha5.VirtualMachineNetworkDHCPOptionsStatus{
+								Enabled: iface.IP.DHCP.IP6.Enabled,
+							},
+						}
+						if iface.IP.DHCP.IP4.Config != nil {
+							d.IP.DHCP.IP4.Config = []vmoprv1alpha5common.KeyValuePair{}
+							for _, pair := range iface.IP.DHCP.IP4.Config {
+								d.IP.DHCP.IP4.Config = append(d.IP.DHCP.IP4.Config, vmoprv1alpha5common.KeyValuePair{
+									Key:   pair.Key,
+									Value: pair.Value,
+								})
+							}
+						}
+						if iface.IP.DHCP.IP6.Config != nil {
+							d.IP.DHCP.IP6.Config = []vmoprv1alpha5common.KeyValuePair{}
+							for _, pair := range iface.IP.DHCP.IP6.Config {
+								d.IP.DHCP.IP6.Config = append(d.IP.DHCP.IP6.Config, vmoprv1alpha5common.KeyValuePair{
+									Key:   pair.Key,
+									Value: pair.Value,
+								})
+							}
+						}
+					}
 				}
 				d.Name = iface.Name
 				dst.Status.Network.Interfaces = append(dst.Status.Network.Interfaces, d)
@@ -299,6 +399,5 @@ func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw vmoprconversion.Hu
 	}
 	dst.Status.PowerState = vmoprv1alpha5.VirtualMachinePowerState(src.Status.PowerState)
 
-	c.VirtualMachine = dst
 	return nil
 }

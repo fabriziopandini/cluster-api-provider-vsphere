@@ -19,18 +19,16 @@ package conversion
 // FIXME: rules for import name consistency, import rule restrictions (no vmoprv1 outside of this folder)
 
 import (
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ConvertibleWrapper defines a wrapper to an object that make the object convertible i.e. it can be converted to/from a hub type.
 type ConvertibleWrapper interface {
-	client.Object
-
 	GroupVersionKind() schema.GroupVersionKind
-	Set(client.Object)
-	ConvertTo(dst Hub) error
-	ConvertFrom(src Hub) error
+	ConvertTo(src runtime.Object, dst runtime.Object) error
+	ConvertFrom(src runtime.Object, dst runtime.Object) error
 }
 
 // Hub marks that a given type is the hub type for conversion.

@@ -20,7 +20,6 @@ package hub
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-/*
 // LocalObjectRef describes a reference to another object in the same
 // namespace as the referrer.
 type LocalObjectRef struct {
@@ -40,7 +39,6 @@ type LocalObjectRef struct {
 	// More info: http://kubernetes.io/docs/user-guide/identifiers#names
 	Name string `json:"name"`
 }
-*/
 
 // PartialObjectRef describes a reference to another object in the same
 // namespace as the referrer. The reference can be just a name but may also

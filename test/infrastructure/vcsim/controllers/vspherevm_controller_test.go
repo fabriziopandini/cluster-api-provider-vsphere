@@ -42,6 +42,7 @@ import (
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	vcsimv1 "sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/api/v1alpha1"
 )
 
@@ -55,8 +56,10 @@ var (
 func init() {
 	// scheme used for operating on the management cluster.
 	_ = clusterv1.AddToScheme(scheme)
+	_ = clusterv1beta1.AddToScheme(scheme)
 	_ = infrav1.AddToScheme(scheme)
 	_ = vmwarev1.AddToScheme(scheme)
+	_ = vmoprvhub.AddToScheme(scheme)
 	_ = vmoprv1.AddToScheme(scheme)
 	_ = vcsimv1.AddToScheme(scheme)
 

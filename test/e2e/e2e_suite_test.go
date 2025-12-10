@@ -42,6 +42,7 @@ import (
 	infrav1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	topologyv1 "sigs.k8s.io/cluster-api-provider-vsphere/internal/apis/topology/v1alpha1"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	vsphereframework "sigs.k8s.io/cluster-api-provider-vsphere/test/framework"
 	vsphereip "sigs.k8s.io/cluster-api-provider-vsphere/test/framework/ip"
 	vspherelog "sigs.k8s.io/cluster-api-provider-vsphere/test/framework/log"
@@ -353,6 +354,7 @@ func initScheme() *runtime.Scheme {
 		_ = corev1.AddToScheme(sc)
 		_ = storagev1.AddToScheme(sc)
 		_ = topologyv1.AddToScheme(sc)
+		_ = vmoprvhub.AddToScheme(sc)
 		_ = vmoprv1.AddToScheme(sc)
 		_ = vmwarev1.AddToScheme(sc)
 	}

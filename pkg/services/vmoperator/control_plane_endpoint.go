@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	vmoprconversionutil "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/util"
 )
 
 const (
@@ -197,7 +198,7 @@ func (s *CPService) createVMControlPlaneService(ctx context.Context, clusterCtx 
 
 	vmService := newVirtualMachineService(clusterCtx)
 
-	_, err := ctrlutil.CreateOrPatch(ctx, s.Client, vmService, func() error {
+	_, err := vmoprconversionutil.CreateOrPatch(ctx, s.Client, vmService, func() error {
 		if vmService.Annotations == nil {
 			vmService.Annotations = annotations
 		} else {

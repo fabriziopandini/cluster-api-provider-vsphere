@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
-	"sigs.k8s.io/randfill"
 
 	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
@@ -35,7 +34,6 @@ func TestFuzzyConversion(t *testing.T) {
 		Hub:          &vmoprvhub.VirtualMachine{},
 		Spoke:        &vmoprv1alpha2.VirtualMachine{},
 		SpokeWrapper: &VirtualMachineConvertibleWrapper{},
-		FuzzerFuncs:  []any{hubVirtualMachineStatus},
 	}))
 	t.Run("for VirtualMachineService", vmoprconversion.RoundTripTest(vmoprconversion.RoundTripTestInput{
 		Hub:          &vmoprvhub.VirtualMachineService{},
@@ -52,10 +50,9 @@ func TestFuzzyConversion(t *testing.T) {
 		Spoke:        &vmoprv1alpha2.VirtualMachineClass{},
 		SpokeWrapper: &VirtualMachineClassConvertibleWrapper{},
 	}))
-}
-
-func hubVirtualMachineStatus(in *vmoprvhub.VirtualMachineStatus, c randfill.Continue) {
-	c.Fill(in)
-	// FIXME
-	in.Host = ""
+	t.Run("for VirtualMachineImage", vmoprconversion.RoundTripTest(vmoprconversion.RoundTripTestInput{
+		Hub:          &vmoprvhub.VirtualMachineImage{},
+		Spoke:        &vmoprv1alpha2.VirtualMachineImage{},
+		SpokeWrapper: &VirtualMachineImageConvertibleWrapper{},
+	}))
 }

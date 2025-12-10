@@ -44,18 +44,18 @@ func init() {
 	_ = vmoprv1alpha5.AddToScheme(scheme)
 }
 
-func Test_versionAwareClient_Get(t *testing.T) {
+func Test_conversionClient_Get(t *testing.T) {
 	tests := []struct {
 		name             string
 		preferredVersion string
-		vmopObj          client.Object
+		spokeObj         client.Object
 		wantHubObj       client.Object
 		wantErr          bool
 	}{
 		{
 			name:             "Get VirtualMachine when preferred version is v1alpha2",
 			preferredVersion: "v1alpha2",
-			vmopObj: &vmoprv1alpha2.VirtualMachine{
+			spokeObj: &vmoprv1alpha2.VirtualMachine{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-vm",
 					Namespace: "test-ns",
@@ -75,7 +75,7 @@ func Test_versionAwareClient_Get(t *testing.T) {
 		{
 			name:             "Get VirtualMachine when preferred version is v1alpha5",
 			preferredVersion: "v1alpha5",
-			vmopObj: &vmoprv1alpha5.VirtualMachine{
+			spokeObj: &vmoprv1alpha5.VirtualMachine{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-vm",
 					Namespace: "test-ns",
@@ -98,14 +98,14 @@ func Test_versionAwareClient_Get(t *testing.T) {
 			g := NewWithT(t)
 
 			c := conversionClient{
-				internalClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.vmopObj).Build(),
+				internalClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.spokeObj).Build(),
 				overrideGetPreferredVersion: func() string {
 					return tt.preferredVersion
 				},
 			}
 
 			hubObj := &vmoprvhub.VirtualMachine{}
-			err := c.Get(ctx, client.ObjectKeyFromObject(tt.vmopObj), hubObj)
+			err := c.Get(ctx, client.ObjectKeyFromObject(tt.spokeObj), hubObj)
 			if (err != nil) != tt.wantErr {
 				g.Fail(fmt.Sprintf("Get() error = %v, wantErr %v", err, tt.wantErr))
 			}
@@ -116,18 +116,18 @@ func Test_versionAwareClient_Get(t *testing.T) {
 	}
 }
 
-func Test_versionAwareClient_List(t *testing.T) {
+func Test_conversionClient_List(t *testing.T) {
 	tests := []struct {
 		name             string
 		preferredVersion string
-		vmopObjs         []client.Object
+		spokeObjs        []client.Object
 		wantHubObjs      []client.Object
 		wantErr          bool
 	}{
 		{
 			name:             "Get VirtualMachine when preferred version is v1alpha2",
 			preferredVersion: "v1alpha2",
-			vmopObjs: []client.Object{
+			spokeObjs: []client.Object{
 				&vmoprv1alpha2.VirtualMachine{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       "VirtualMachine",
@@ -158,7 +158,7 @@ func Test_versionAwareClient_List(t *testing.T) {
 			g := NewWithT(t)
 
 			c := conversionClient{
-				internalClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.vmopObjs...).Build(),
+				internalClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.spokeObjs...).Build(),
 				overrideGetPreferredVersion: func() string {
 					return tt.preferredVersion
 				},
@@ -175,7 +175,120 @@ func Test_versionAwareClient_List(t *testing.T) {
 				wantHubObj.SetResourceVersion(hubObjs.Items[i].GetResourceVersion())
 				g.Expect(&hubObjs.Items[i]).To(Equal(wantHubObj))
 			}
+		})
+	}
+}
 
+func Test_conversionClient_Create(t *testing.T) {
+	tests := []struct {
+		name             string
+		preferredVersion string
+		hubObj           client.Object
+		wantErr          bool
+	}{
+		{
+			name:             "Get VirtualMachine when preferred version is v1alpha2",
+			preferredVersion: "v1alpha2",
+			hubObj: &vmoprvhub.VirtualMachine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-vm",
+					Namespace: "test-ns",
+				},
+				Spec: vmoprvhub.VirtualMachineSpec{
+					ClassName: "test-class",
+				},
+				Convertible: vmoprconversionmeta.TypeMetaConvertible{
+					APIVersion: vmoprv1alpha2.GroupVersion.String(),
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := conversionClient{
+				internalClient: fake.NewClientBuilder().WithScheme(scheme).Build(),
+				overrideGetPreferredVersion: func() string {
+					return tt.preferredVersion
+				},
+			}
+
+			hubOriginal := tt.hubObj.DeepCopyObject().(client.Object)
+
+			err := c.Create(ctx, tt.hubObj)
+			if (err != nil) != tt.wantErr {
+				g.Fail(fmt.Sprintf("Get() error = %v, wantErr %v", err, tt.wantErr))
+			}
+
+			hubObj := &vmoprvhub.VirtualMachine{}
+			err = c.Get(ctx, client.ObjectKeyFromObject(tt.hubObj), hubObj)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			g.Expect(hubObj.GetResourceVersion()).ToNot(BeEmpty())
+			hubOriginal.SetResourceVersion(hubObj.GetResourceVersion())
+			g.Expect(hubObj).To(Equal(hubOriginal))
+		})
+	}
+}
+
+func Test_conversionClient_Patch(t *testing.T) {
+	tests := []struct {
+		name             string
+		preferredVersion string
+		hubObj           client.Object
+		modifyFunc       func(client.Object) client.Object
+		wantSpokeObj     client.Object
+		wantErr          bool
+	}{
+		{
+			name:             "Get VirtualMachine when preferred version is v1alpha2",
+			preferredVersion: "v1alpha2",
+			hubObj: &vmoprvhub.VirtualMachine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-vm",
+					Namespace: "test-ns",
+				},
+				Spec: vmoprvhub.VirtualMachineSpec{
+					ClassName: "test-class",
+				},
+				Convertible: vmoprconversionmeta.TypeMetaConvertible{
+					APIVersion: vmoprv1alpha2.GroupVersion.String(),
+				},
+			},
+			modifyFunc: func(o client.Object) client.Object {
+				vm := o.(*vmoprvhub.VirtualMachine)
+				vm.Spec.ClassName = "another-class"
+				return vm
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := conversionClient{
+				internalClient: fake.NewClientBuilder().WithScheme(scheme).Build(),
+				overrideGetPreferredVersion: func() string {
+					return tt.preferredVersion
+				},
+			}
+
+			err := c.Create(ctx, tt.hubObj)
+			hubObjModified := tt.modifyFunc(tt.hubObj.(*vmoprvhub.VirtualMachine))
+
+			err = c.Patch(ctx, hubObjModified, MergeFrom(tt.hubObj))
+			if (err != nil) != tt.wantErr {
+				g.Fail(fmt.Sprintf("Get() error = %v, wantErr %v", err, tt.wantErr))
+			}
+
+			hubObj := &vmoprvhub.VirtualMachine{}
+			err = c.Get(ctx, client.ObjectKeyFromObject(hubObjModified), hubObj)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			g.Expect(hubObj).To(Equal(hubObjModified))
 		})
 	}
 }

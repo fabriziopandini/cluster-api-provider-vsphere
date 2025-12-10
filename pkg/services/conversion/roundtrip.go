@@ -72,19 +72,18 @@ func RoundTripTest(input RoundTripTestInput) func(*testing.T) {
 
 				// First convert hub to spoke
 				spokeWrapper := input.SpokeWrapper
-				spoke := input.Spoke.DeepCopyObject().(client.Object)
-				spokeWrapper.Set(spoke)
-				if err := spokeWrapper.ConvertFrom(hubBefore); err != nil {
+				spoke := input.Spoke.DeepCopyObject()
+				if err := spokeWrapper.ConvertFrom(hubBefore, spoke); err != nil {
 					t.Fatalf("error calling ConvertFrom: %v", err)
 				}
 
 				// Convert spoke back to hub and check if the resulting hub is equal to the hub before the round trip
 				hubAfter := input.Hub.DeepCopyObject().(Hub)
-				if err := spokeWrapper.ConvertTo(hubAfter); err != nil {
+				if err := spokeWrapper.ConvertTo(spoke, hubAfter); err != nil {
 					t.Fatalf("error calling ConvertTo: %v", err)
 				}
 				if hubAfter.GetConvertibleAPIVersion() != spokeWrapper.GroupVersionKind().GroupVersion().String() {
-					t.Fatalf("ConvertTo is expected to set Convertible.APIVersion")
+					t.Fatal("ConvertTo is expected to set Convertible.APIVersion")
 				}
 				hubAfter.SetConvertibleAPIVersion("")
 
@@ -94,7 +93,7 @@ func RoundTripTest(input RoundTripTestInput) func(*testing.T) {
 
 				if !apiequality.Semantic.DeepEqual(hubBefore, hubAfter) {
 					diff := cmp.Diff(hubBefore, hubAfter)
-					t.Fatalf(diff)
+					t.Fatal(diff)
 				}
 			}
 		})

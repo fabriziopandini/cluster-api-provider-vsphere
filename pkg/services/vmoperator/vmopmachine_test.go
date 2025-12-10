@@ -42,6 +42,7 @@ import (
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/fake"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/network"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/util"
 )
@@ -377,7 +378,7 @@ var _ = Describe("VirtualMachine tests", func() {
 			supervisorMachineContext.VMModifiers = []vmware.VMModifier{
 				func(obj runtime.Object) (runtime.Object, error) {
 					// No need to check the type. We know this will be a VirtualMachine
-					vm, _ := obj.(*vmoprv1.VirtualMachine)
+					vm, _ := obj.(*vmoprvhub.VirtualMachine)
 					vm.Spec.ImageName = modifiedImage
 					return vm, nil
 				},

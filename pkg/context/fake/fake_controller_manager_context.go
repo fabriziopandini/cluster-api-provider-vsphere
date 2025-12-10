@@ -30,6 +30,7 @@ import (
 	infrav1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	capvcontext "sigs.k8s.io/cluster-api-provider-vsphere/pkg/context"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 )
 
 // NewControllerManagerContext returns a fake ControllerManagerContext for unit
@@ -43,6 +44,7 @@ func NewControllerManagerContext(initObjects ...client.Object) *capvcontext.Cont
 	_ = controlplanev1.AddToScheme(scheme)
 	_ = infrav1.AddToScheme(scheme)
 	_ = vmwarev1.AddToScheme(scheme)
+	_ = vmoprvhub.AddToScheme(scheme)
 	_ = vmoprv1.AddToScheme(scheme)
 	_ = ipamv1beta1.AddToScheme(scheme)
 

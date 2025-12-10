@@ -52,10 +52,15 @@ func TestFuzzyConversion(t *testing.T) {
 		Spoke:        &vmoprv1alpha5.VirtualMachineClass{},
 		SpokeWrapper: &VirtualMachineClassConvertibleWrapper{},
 	}))
+	t.Run("for VirtualMachineImage", vmoprconversion.RoundTripTest(vmoprconversion.RoundTripTestInput{
+		Hub:          &vmoprvhub.VirtualMachineImage{},
+		Spoke:        &vmoprv1alpha5.VirtualMachineImage{},
+		SpokeWrapper: &VirtualMachineImageConvertibleWrapper{},
+	}))
 }
 
 func hubVirtualMachineStatus(in *vmoprvhub.VirtualMachineStatus, c randfill.Continue) {
-	c.Fill(in)
+	c.FillNoCustom(in)
 	// FIXME
 	in.Host = ""
 }

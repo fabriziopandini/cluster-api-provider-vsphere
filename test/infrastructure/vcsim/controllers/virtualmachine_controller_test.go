@@ -38,6 +38,7 @@ import (
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
+	vmoprconversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 	vcsimv1 "sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/api/v1alpha1"
 )
 
@@ -53,27 +54,27 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 			},
 		}
 
-		cluster := &clusterv1.Cluster{
+		cluster := &clusterv1beta1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
 				UID:       "bar",
 			},
-			Spec: clusterv1.ClusterSpec{
-				InfrastructureRef: clusterv1.ContractVersionedObjectReference{
-					APIGroup: vmwarev1.GroupVersion.Group,
-					Kind:     "VSphereCluster",
-					Name:     vsphereCluster.Name,
+			Spec: clusterv1beta1.ClusterSpec{
+				InfrastructureRef: &corev1.ObjectReference{
+					APIVersion: vmwarev1.GroupVersion.String(),
+					Kind:       "VSphereCluster",
+					Name:       vsphereCluster.Name,
 				},
 			},
 		}
 
-		machine := &clusterv1.Machine{
+		machine := &clusterv1beta1.Machine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
 				Labels: map[string]string{
-					clusterv1.ClusterNameLabel: cluster.Name,
+					clusterv1beta1.ClusterNameLabel: cluster.Name,
 				},
 			},
 		}
@@ -140,7 +141,7 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 
 		r := VirtualMachineReconciler{
-			Client:          crclient,
+			Client:          vmoprconversionclient.New(crclient),
 			InMemoryManager: inmemoryMgr,
 			APIServerMux:    apiServerMux,
 		}
@@ -175,31 +176,31 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 			},
 		}
 
-		cluster := &clusterv1.Cluster{
+		cluster := &clusterv1beta1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
 				UID:       "bar",
 			},
-			Spec: clusterv1.ClusterSpec{
-				InfrastructureRef: clusterv1.ContractVersionedObjectReference{
-					APIGroup: vmwarev1.GroupVersion.Group,
-					Kind:     "VSphereCluster",
-					Name:     vsphereCluster.Name,
+			Spec: clusterv1beta1.ClusterSpec{
+				InfrastructureRef: &corev1.ObjectReference{
+					APIVersion: vmwarev1.GroupVersion.String(),
+					Kind:       "VSphereCluster",
+					Name:       vsphereCluster.Name,
 				},
 			},
 		}
 
-		machine := &clusterv1.Machine{
+		machine := &clusterv1beta1.Machine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
 				Labels: map[string]string{
-					clusterv1.ClusterNameLabel: cluster.Name,
+					clusterv1beta1.ClusterNameLabel: cluster.Name,
 				},
 			},
-			Spec: clusterv1.MachineSpec{
-				Bootstrap: clusterv1.Bootstrap{
+			Spec: clusterv1beta1.MachineSpec{
+				Bootstrap: clusterv1beta1.Bootstrap{
 					DataSecretName: ptr.To("foo"), // this unblocks node provisioning
 				},
 			},
@@ -275,7 +276,7 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 
 		r := VirtualMachineReconciler{
-			Client:          crclient,
+			Client:          vmoprconversionclient.New(crclient),
 			InMemoryManager: inmemoryMgr,
 			APIServerMux:    apiServerMux,
 		}
