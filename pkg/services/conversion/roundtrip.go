@@ -16,8 +16,6 @@ limitations under the License.
 
 package conversion
 
-// FIXME: rules for import name consistency, import rule restrictions (no vmoprv1 outside of this folder)
-
 import (
 	"testing"
 
@@ -30,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/randfill"
 
-	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	conversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 // RoundTripTestInput contains input parameters
@@ -50,7 +48,7 @@ type RoundTripTestInput struct {
 }
 
 // RoundTripTest returns a new testing function to be used in tests to make sure conversions between
-// the Hub version of an object and an older version aren't lossy.
+// the Hub version of an object and an the corresponding Spoke version aren't lossy.
 func RoundTripTest(input RoundTripTestInput) func(*testing.T) {
 	if input.Scheme == nil {
 		input.Scheme = scheme.Scheme
@@ -60,8 +58,8 @@ func RoundTripTest(input RoundTripTestInput) func(*testing.T) {
 		t.Helper()
 		t.Run("hub-spoke-hub", func(t *testing.T) {
 			fuzzer := conversionutil.GetFuzzer(input.Scheme, func(_ runtimeserializer.CodecFactory) []any {
-				return append(input.FuzzerFuncs, func(in *vmoprconversionmeta.TypeMetaConvertible, c randfill.Continue) {
-					// Ensure TypeMetaConvertible is not set by the fuzzer.
+				return append(input.FuzzerFuncs, func(_ *conversionmeta.SourceTypeMeta, _ randfill.Continue) {
+					// Ensure SourceTypeMeta is not set by the fuzzer.
 				})
 			})
 
@@ -73,19 +71,19 @@ func RoundTripTest(input RoundTripTestInput) func(*testing.T) {
 				// First convert hub to spoke
 				spokeWrapper := input.SpokeWrapper
 				spoke := input.Spoke.DeepCopyObject()
-				if err := spokeWrapper.ConvertFrom(hubBefore, spoke); err != nil {
+				if err := spokeWrapper.ConvertFromHub(hubBefore, spoke); err != nil {
 					t.Fatalf("error calling ConvertFrom: %v", err)
 				}
 
 				// Convert spoke back to hub and check if the resulting hub is equal to the hub before the round trip
 				hubAfter := input.Hub.DeepCopyObject().(Hub)
-				if err := spokeWrapper.ConvertTo(spoke, hubAfter); err != nil {
+				if err := spokeWrapper.ConvertToHub(spoke, hubAfter); err != nil {
 					t.Fatalf("error calling ConvertTo: %v", err)
 				}
-				if hubAfter.GetConvertibleAPIVersion() != spokeWrapper.GroupVersionKind().GroupVersion().String() {
+				if hubAfter.GetSourceAPIVersion() != spokeWrapper.SpokeGroupVersionKind().GroupVersion().String() {
 					t.Fatal("ConvertTo is expected to set Convertible.APIVersion")
 				}
-				hubAfter.SetConvertibleAPIVersion("")
+				hubAfter.SetSourceAPIVersion("")
 
 				if input.HubAfterMutation != nil {
 					input.HubAfterMutation(hubAfter)

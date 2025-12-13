@@ -34,11 +34,11 @@ type VirtualMachineImageConvertibleWrapper struct{}
 
 var _ vmoprconversion.ConvertibleWrapper = &VirtualMachineImageConvertibleWrapper{}
 
-func (c *VirtualMachineImageConvertibleWrapper) GroupVersionKind() schema.GroupVersionKind {
+func (c *VirtualMachineImageConvertibleWrapper) SpokeGroupVersionKind() schema.GroupVersionKind {
 	return vmoprv1alpha2.GroupVersion.WithKind("VirtualMachineImage")
 }
 
-func (c *VirtualMachineImageConvertibleWrapper) ConvertTo(srcRaw runtime.Object, dstRaw runtime.Object) error {
+func (c *VirtualMachineImageConvertibleWrapper) ConvertToHub(srcRaw runtime.Object, dstRaw runtime.Object) error {
 	src, ok := srcRaw.(*vmoprv1alpha2.VirtualMachineImage)
 	if !ok {
 		return errors.Errorf("src object must be of type %T, got %T", &vmoprv1alpha2.VirtualMachineImage{}, srcRaw)
@@ -75,21 +75,21 @@ func (c *VirtualMachineImageConvertibleWrapper) ConvertTo(srcRaw runtime.Object,
 	dst.Status.ProviderItemID = src.Status.ProviderItemID
 
 	// The hub should keep track of the spoke version it was generated from.
-	dst.Convertible = vmoprconversionmeta.TypeMetaConvertible{
-		APIVersion: c.GroupVersionKind().GroupVersion().String(),
+	dst.Source = vmoprconversionmeta.SourceTypeMeta{
+		APIVersion: c.SpokeGroupVersionKind().GroupVersion().String(),
 	}
 	return nil
 }
 
-func (c *VirtualMachineImageConvertibleWrapper) ConvertFrom(srcRaw runtime.Object, dstRaw runtime.Object) error {
+func (c *VirtualMachineImageConvertibleWrapper) ConvertFromHub(srcRaw runtime.Object, dstRaw runtime.Object) error {
 	src, ok := srcRaw.(*vmoprvhub.VirtualMachineImage)
 	if !ok {
 		return errors.Errorf("src object must be of type %T, got %T", &vmoprvhub.VirtualMachineImage{}, srcRaw)
 	}
 
 	// Check if the hub is new or it was generated from the spoke version we are converting to.
-	if src.Convertible.APIVersion != "" && src.Convertible.APIVersion != c.GroupVersionKind().GroupVersion().String() {
-		errors.Errorf("src object originated from %s, it can't be converted to %s", src.Convertible.APIVersion, c.GroupVersionKind().GroupVersion().String())
+	if src.Source.APIVersion != "" && src.Source.APIVersion != c.SpokeGroupVersionKind().GroupVersion().String() {
+		errors.Errorf("src object originated from %s, it can't be converted to %s", src.Source.APIVersion, c.SpokeGroupVersionKind().GroupVersion().String())
 	}
 
 	dst, ok := dstRaw.(*vmoprv1alpha2.VirtualMachineImage)

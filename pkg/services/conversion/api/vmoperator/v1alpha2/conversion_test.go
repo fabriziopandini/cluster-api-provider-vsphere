@@ -1,5 +1,3 @@
-//go:build !race
-
 /*
 Copyright 2025 The Kubernetes Authors.
 
@@ -23,36 +21,34 @@ import (
 
 	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 
-	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 )
 
-// Test is disabled when the race detector is enabled (via "//go:build !race" above) because otherwise the fuzz tests would just time out.
-
 func TestFuzzyConversion(t *testing.T) {
-	t.Run("for VirtualMachine", vmoprconversion.RoundTripTest(vmoprconversion.RoundTripTestInput{
+	t.Run("for VirtualMachine", conversion.RoundTripTest(conversion.RoundTripTestInput{
 		Hub:          &vmoprvhub.VirtualMachine{},
 		Spoke:        &vmoprv1alpha2.VirtualMachine{},
 		SpokeWrapper: &VirtualMachineConvertibleWrapper{},
 	}))
-	t.Run("for VirtualMachineService", vmoprconversion.RoundTripTest(vmoprconversion.RoundTripTestInput{
-		Hub:          &vmoprvhub.VirtualMachineService{},
-		Spoke:        &vmoprv1alpha2.VirtualMachineService{},
-		SpokeWrapper: &VirtualMachineServiceConvertibleWrapper{},
-	}))
-	t.Run("for VirtualMachineSetResourcePolicy", vmoprconversion.RoundTripTest(vmoprconversion.RoundTripTestInput{
-		Hub:          &vmoprvhub.VirtualMachineSetResourcePolicy{},
-		Spoke:        &vmoprv1alpha2.VirtualMachineSetResourcePolicy{},
-		SpokeWrapper: &VirtualMachineSetResourcePolicyConvertibleWrapper{},
-	}))
-	t.Run("for VirtualMachineClass", vmoprconversion.RoundTripTest(vmoprconversion.RoundTripTestInput{
+	t.Run("for VirtualMachineClass", conversion.RoundTripTest(conversion.RoundTripTestInput{
 		Hub:          &vmoprvhub.VirtualMachineClass{},
 		Spoke:        &vmoprv1alpha2.VirtualMachineClass{},
 		SpokeWrapper: &VirtualMachineClassConvertibleWrapper{},
 	}))
-	t.Run("for VirtualMachineImage", vmoprconversion.RoundTripTest(vmoprconversion.RoundTripTestInput{
+	t.Run("for VirtualMachineImage", conversion.RoundTripTest(conversion.RoundTripTestInput{
 		Hub:          &vmoprvhub.VirtualMachineImage{},
 		Spoke:        &vmoprv1alpha2.VirtualMachineImage{},
 		SpokeWrapper: &VirtualMachineImageConvertibleWrapper{},
+	}))
+	t.Run("for VirtualMachineService", conversion.RoundTripTest(conversion.RoundTripTestInput{
+		Hub:          &vmoprvhub.VirtualMachineService{},
+		Spoke:        &vmoprv1alpha2.VirtualMachineService{},
+		SpokeWrapper: &VirtualMachineServiceConvertibleWrapper{},
+	}))
+	t.Run("for VirtualMachineSetResourcePolicy", conversion.RoundTripTest(conversion.RoundTripTestInput{
+		Hub:          &vmoprvhub.VirtualMachineSetResourcePolicy{},
+		Spoke:        &vmoprv1alpha2.VirtualMachineSetResourcePolicy{},
+		SpokeWrapper: &VirtualMachineSetResourcePolicyConvertibleWrapper{},
 	}))
 }

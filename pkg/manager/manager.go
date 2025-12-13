@@ -23,7 +23,7 @@ import (
 	"github.com/pkg/errors"
 	netopv1 "github.com/vmware-tanzu/net-operator-api/api/v1alpha1"
 	nsxvpcv1 "github.com/vmware-tanzu/nsx-operator/pkg/apis/vpc/v1alpha1"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
+	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	ncpv1 "github.com/vmware-tanzu/vm-operator/external/ncp/api/v1alpha1"
 	"gopkg.in/fsnotify.v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -41,7 +41,7 @@ import (
 	topologyv1 "sigs.k8s.io/cluster-api-provider-vsphere/internal/apis/topology/v1alpha1"
 	capvcontext "sigs.k8s.io/cluster-api-provider-vsphere/pkg/context"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	vmoprconversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
+	conversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 )
 
 // Manager is a CAPV controller manager.
@@ -67,7 +67,7 @@ func New(ctx context.Context, opts Options) (Manager, error) {
 	_ = bootstrapv1.AddToScheme(opts.Scheme)
 	_ = vmwarev1.AddToScheme(opts.Scheme)
 	_ = vmoprvhub.AddToScheme(opts.Scheme)
-	_ = vmoprv1.AddToScheme(opts.Scheme)
+	_ = vmoprv1alpha2.AddToScheme(opts.Scheme)
 	_ = ncpv1.AddToScheme(opts.Scheme)
 	_ = netopv1.AddToScheme(opts.Scheme)
 	_ = nsxvpcv1.AddToScheme(opts.Scheme)
@@ -87,13 +87,15 @@ func New(ctx context.Context, opts Options) (Manager, error) {
 		Name:                    opts.PodName,
 		LeaderElectionID:        opts.LeaderElectionID,
 		LeaderElectionNamespace: opts.LeaderElectionNamespace,
-		Client:                  vmoprconversionclient.New(mgr.GetClient()),
-		Logger:                  opts.Logger,
-		Scheme:                  opts.Scheme,
-		Username:                opts.Username,
-		Password:                opts.Password,
-		NetworkProvider:         opts.NetworkProvider,
-		WatchFilterValue:        opts.WatchFilterValue,
+		// NOTE: use a client that can handle conversion from versions that exist in the supervisor
+		// and the internal hub version used in the reconcilers.
+		Client:           conversionclient.New(mgr.GetClient()),
+		Logger:           opts.Logger,
+		Scheme:           opts.Scheme,
+		Username:         opts.Username,
+		Password:         opts.Password,
+		NetworkProvider:  opts.NetworkProvider,
+		WatchFilterValue: opts.WatchFilterValue,
 	}
 
 	// Add the requested items to the manager.

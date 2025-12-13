@@ -18,7 +18,7 @@ package util
 
 import (
 	netopv1 "github.com/vmware-tanzu/net-operator-api/api/v1alpha1"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
+	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	ncpv1 "github.com/vmware-tanzu/vm-operator/external/ncp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +34,7 @@ import (
 	capvcontext "sigs.k8s.io/cluster-api-provider-vsphere/pkg/context"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	vmoprconversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
+	conversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 )
 
 const (
@@ -149,7 +149,7 @@ func createScheme() *runtime.Scheme {
 	_ = clusterv1.AddToScheme(scheme)
 	_ = topologyv1.AddToScheme(scheme)
 	_ = vmoprvhub.AddToScheme(scheme)
-	_ = vmoprv1.AddToScheme(scheme)
+	_ = vmoprv1alpha2.AddToScheme(scheme)
 	_ = netopv1.AddToScheme(scheme)
 	_ = ncpv1.AddToScheme(scheme)
 	return scheme
@@ -165,11 +165,13 @@ func CreateClusterContext(cluster *clusterv1.Cluster, vsphereCluster *vmwarev1.V
 		}, &capvcontext.ControllerManagerContext{
 			Logger: klog.Background().WithName("controller-manager-logger"),
 			Scheme: scheme,
-			Client: vmoprconversionclient.New(fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(
+			// NOTE: use a client that can handle conversion from versions that exist in the supervisor
+			// and the internal hub version used in the reconcilers.
+			Client: conversionclient.New(fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(
 				&vmoprvhub.VirtualMachineService{},
 				&vmoprvhub.VirtualMachine{},
-				&vmoprv1.VirtualMachineService{},
-				&vmoprv1.VirtualMachine{},
+				&vmoprv1alpha2.VirtualMachineService{},
+				&vmoprv1alpha2.VirtualMachine{},
 			).Build()),
 		}
 }

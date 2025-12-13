@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -64,6 +63,7 @@ import (
 	inframanager "sigs.k8s.io/cluster-api-provider-vsphere/pkg/manager"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	conversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/vmoperator"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/util"
 )
@@ -104,6 +104,12 @@ func AddMachineControllerToManager(ctx context.Context, controllerManagerContext
 		r.networkProvider = networkProvider
 		r.VMService = &vmoperator.VmopMachineService{Client: controllerManagerContext.Client, ConfigureControlPlaneVMReadinessProbe: r.networkProvider.SupportsVMReadinessProbe()}
 
+		// NOTE: use vm-operator native types for watches (the reconciler uses the internal hub version).
+		vm, err := conversionclient.NewWatchObject(mgr.GetClient(), vmoprvhub.GroupVersion.WithKind("VirtualMachine"))
+		if err != nil {
+			return err
+		}
+
 		return ctrl.NewControllerManagedBy(mgr).
 			// Watch the controlled, infrastructure resource.
 			For(&vmwarev1.VSphereMachine{}).
@@ -133,7 +139,7 @@ func AddMachineControllerToManager(ctx context.Context, controllerManagerContext
 			).
 			WithEventFilter(predicates.ResourceHasFilterLabel(mgr.GetScheme(), predicateLog, controllerManagerContext.WatchFilterValue)).
 			// Watch any VirtualMachine resources owned by this VSphereMachine
-			Owns(&vmoprv1.VirtualMachine{}).
+			Owns(vm).
 			Complete(r)
 	}
 

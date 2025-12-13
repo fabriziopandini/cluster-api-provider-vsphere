@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
+	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +33,7 @@ import (
 
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	vmoprconversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
+	conversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 )
 
 func Test_vSphereMachineTemplateReconciler_Reconcile(t *testing.T) {
@@ -44,7 +44,7 @@ func Test_vSphereMachineTemplateReconciler_Reconcile(t *testing.T) {
 	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	g.Expect(vmwarev1.AddToScheme(scheme)).To(Succeed())
 	g.Expect(vmoprvhub.AddToScheme(scheme)).To(Succeed())
-	g.Expect(vmoprv1.AddToScheme(scheme)).To(Succeed())
+	g.Expect(vmoprv1alpha2.AddToScheme(scheme)).To(Succeed())
 
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -86,7 +86,7 @@ func Test_vSphereMachineTemplateReconciler_Reconcile(t *testing.T) {
 			name:                   "VirtualMachineClass does exist and has cpu and memory set",
 			vSphereMachineTemplate: vSphereMachineTemplate(namespace.Name, "with-class", "vm-class", nil),
 			objects: []client.Object{
-				virtualMachineClass(namespace.Name, "vm-class", &vmoprv1.VirtualMachineClassHardware{Cpus: 1, Memory: quantity(1024)}),
+				virtualMachineClass(namespace.Name, "vm-class", &vmoprv1alpha2.VirtualMachineClassHardware{Cpus: 1, Memory: quantity(1024)}),
 			},
 			wantErr: "",
 			wantStatus: &vmwarev1.VSphereMachineTemplateStatus{
@@ -105,7 +105,7 @@ func Test_vSphereMachineTemplateReconciler_Reconcile(t *testing.T) {
 				},
 			}),
 			objects: []client.Object{
-				virtualMachineClass(namespace.Name, "vm-class", &vmoprv1.VirtualMachineClassHardware{Cpus: 2, Memory: quantity(2048)}),
+				virtualMachineClass(namespace.Name, "vm-class", &vmoprv1alpha2.VirtualMachineClassHardware{Cpus: 2, Memory: quantity(2048)}),
 			},
 			wantErr: "",
 			wantStatus: &vmwarev1.VSphereMachineTemplateStatus{
@@ -138,9 +138,10 @@ func Test_vSphereMachineTemplateReconciler_Reconcile(t *testing.T) {
 				},
 			}
 
-			// FIXME: consider if we want to pin preferred version (it must be consistent with the types registered in the schema) or not
 			r := &vSphereMachineTemplateReconciler{
-				Client: vmoprconversionclient.New(fakeClientBuilder.Build()),
+				// NOTE: use a client that can handle conversion from versions that exist in the supervisor
+				// and the internal hub version used by the reconcilers.
+				Client: conversionclient.New(fakeClientBuilder.Build()),
 			}
 
 			_, err := r.Reconcile(ctx, req)
@@ -181,8 +182,8 @@ func vSphereMachineTemplate(namespace, name, className string, status *vmwarev1.
 	return tpl
 }
 
-func virtualMachineClass(namespace, name string, hardware *vmoprv1.VirtualMachineClassHardware) *vmoprv1.VirtualMachineClass {
-	class := &vmoprv1.VirtualMachineClass{
+func virtualMachineClass(namespace, name string, hardware *vmoprv1alpha2.VirtualMachineClassHardware) *vmoprv1alpha2.VirtualMachineClass {
+	class := &vmoprv1alpha2.VirtualMachineClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
 			Name:      name,

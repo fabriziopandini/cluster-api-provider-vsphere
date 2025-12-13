@@ -14,9 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package meta defines metadata for the hub version of supervisor's API objects.
 package meta
 
-type TypeMetaConvertible struct {
+// SourceTypeMeta defines type meta of the source of this object.
+type SourceTypeMeta struct {
 	// APIVersion defines the versioned schema of this representation of an object.
 	// Servers should convert recognized schemas to the latest internal value, and
 	// may reject unrecognized values.

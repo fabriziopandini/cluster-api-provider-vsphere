@@ -35,11 +35,11 @@ type VirtualMachineConvertibleWrapper struct{}
 
 var _ vmoprconversion.ConvertibleWrapper = &VirtualMachineConvertibleWrapper{}
 
-func (c *VirtualMachineConvertibleWrapper) GroupVersionKind() schema.GroupVersionKind {
+func (c *VirtualMachineConvertibleWrapper) SpokeGroupVersionKind() schema.GroupVersionKind {
 	return vmoprv1alpha2.GroupVersion.WithKind("VirtualMachine")
 }
 
-func (c *VirtualMachineConvertibleWrapper) ConvertTo(srcRaw runtime.Object, dstRaw runtime.Object) error {
+func (c *VirtualMachineConvertibleWrapper) ConvertToHub(srcRaw runtime.Object, dstRaw runtime.Object) error {
 	src, ok := srcRaw.(*vmoprv1alpha2.VirtualMachine)
 	if !ok {
 		return errors.Errorf("src object must be of type %T, got %T", &vmoprv1alpha2.VirtualMachine{}, srcRaw)
@@ -142,7 +142,6 @@ func (c *VirtualMachineConvertibleWrapper) ConvertTo(srcRaw runtime.Object, dstR
 			dst.Status.Conditions = append(dst.Status.Conditions, condition)
 		}
 	}
-	dst.Status.Host = src.Status.Host
 	if src.Status.Network != nil {
 		dst.Status.Network = &vmoprvhub.VirtualMachineNetworkStatus{}
 		if src.Status.Network.Interfaces != nil {
@@ -213,24 +212,25 @@ func (c *VirtualMachineConvertibleWrapper) ConvertTo(srcRaw runtime.Object, dstR
 		dst.Status.Network.PrimaryIP4 = src.Status.Network.PrimaryIP4
 		dst.Status.Network.PrimaryIP6 = src.Status.Network.PrimaryIP6
 	}
+	dst.Status.NodeName = src.Status.Host
 	dst.Status.PowerState = vmoprvhub.VirtualMachinePowerState(src.Status.PowerState)
 
 	// The hub should keep track of the spoke version it was generated from.
-	dst.Convertible = vmoprconversionmeta.TypeMetaConvertible{
-		APIVersion: c.GroupVersionKind().GroupVersion().String(),
+	dst.Source = vmoprconversionmeta.SourceTypeMeta{
+		APIVersion: c.SpokeGroupVersionKind().GroupVersion().String(),
 	}
 	return nil
 }
 
-func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw runtime.Object, dstRaw runtime.Object) error {
+func (c *VirtualMachineConvertibleWrapper) ConvertFromHub(srcRaw runtime.Object, dstRaw runtime.Object) error {
 	src, ok := srcRaw.(*vmoprvhub.VirtualMachine)
 	if !ok {
 		return errors.Errorf("src object must be of type %T, got %T", &vmoprvhub.VirtualMachine{}, srcRaw)
 	}
 
 	// Check if the hub is new or it was generated from the spoke version we are converting to.
-	if src.Convertible.APIVersion != "" && src.Convertible.APIVersion != c.GroupVersionKind().GroupVersion().String() {
-		errors.Errorf("src object originated from %s, it can't be converted to %s", src.Convertible.APIVersion, c.GroupVersionKind().GroupVersion().String())
+	if src.Source.APIVersion != "" && src.Source.APIVersion != c.SpokeGroupVersionKind().GroupVersion().String() {
+		errors.Errorf("src object originated from %s, it can't be converted to %s", src.Source.APIVersion, c.SpokeGroupVersionKind().GroupVersion().String())
 	}
 
 	dst, ok := dstRaw.(*vmoprv1alpha2.VirtualMachine)
@@ -327,7 +327,7 @@ func (c *VirtualMachineConvertibleWrapper) ConvertFrom(srcRaw runtime.Object, ds
 			dst.Status.Conditions = append(dst.Status.Conditions, condition)
 		}
 	}
-	dst.Status.Host = src.Status.Host
+	dst.Status.Host = src.Status.NodeName
 	if src.Status.Network != nil {
 		dst.Status.Network = &vmoprv1alpha2.VirtualMachineNetworkStatus{}
 		if src.Status.Network.Interfaces != nil {

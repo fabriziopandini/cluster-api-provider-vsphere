@@ -29,12 +29,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
 	vmoprv1alpha2conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/v1alpha2"
 	vmoprv1alpha5conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/v1alpha5"
 )
 
+// New return a new conversion aware client.
 func New(c client.Client) client.Client {
 	return &conversionClient{
 		internalClient: c,
@@ -50,6 +51,7 @@ type conversionClient struct {
 // conversionClient must implement client.Client.
 var _ client.Client = &conversionClient{}
 
+// Get retrieves an obj for the given object key from the Kubernetes Cluster.
 func (c conversionClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvk, err := c.GroupVersionKindFor(obj)
 	if err != nil {
@@ -66,7 +68,7 @@ func (c conversionClient) Get(ctx context.Context, key client.ObjectKey, obj cli
 		return err
 	}
 
-	spokeObj, err := c.newObj(converter.GroupVersionKind())
+	spokeObj, err := newClientObject(c.internalClient.Scheme(), converter.SpokeGroupVersionKind())
 	if err != nil {
 		return err
 	}
@@ -74,9 +76,10 @@ func (c conversionClient) Get(ctx context.Context, key client.ObjectKey, obj cli
 	if err := c.internalClient.Get(ctx, key, spokeObj, opts...); err != nil {
 		return err
 	}
-	return converter.ConvertTo(spokeObj, obj)
+	return converter.ConvertToHub(spokeObj, obj)
 }
 
+// List retrieves list of objects for a given namespace and list options.
 func (c conversionClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	hubListGVK, err := c.GroupVersionKindFor(list)
 	if err != nil {
@@ -87,7 +90,6 @@ func (c conversionClient) List(ctx context.Context, list client.ObjectList, opts
 		return c.internalClient.List(ctx, list, opts...)
 	}
 
-	// FIXME: check suffix
 	hubItemGVK := schema.GroupVersionKind{
 		Group:   hubListGVK.Group,
 		Version: hubListGVK.Version,
@@ -100,7 +102,7 @@ func (c conversionClient) List(ctx context.Context, list client.ObjectList, opts
 		return err
 	}
 
-	spokeItemGVK := converter.GroupVersionKind()
+	spokeItemGVK := converter.SpokeGroupVersionKind()
 	spokeItemList := schema.GroupVersionKind{
 		Group:   spokeItemGVK.Group,
 		Version: spokeItemGVK.Version,
@@ -133,28 +135,62 @@ func (c conversionClient) List(ctx context.Context, list client.ObjectList, opts
 			return errors.Errorf("%T does not implement client.Object", spokeItemRaw)
 		}
 
-		hubItem, err := c.newObj(hubItemGVK)
+		hubItem, err := newClientObject(c.internalClient.Scheme(), hubItemGVK)
 		if err != nil {
 			return err
 		}
 
-		if converter.ConvertTo(spokeItem, hubItem); err != nil {
+		if err := converter.ConvertToHub(spokeItem, hubItem); err != nil {
 			return err
 		}
 		listObjs = append(listObjs, hubItem)
 	}
 
-	if meta.SetList(list, listObjs); err != nil {
+	return meta.SetList(list, listObjs)
+}
+
+// Apply applies the given apply configuration to the Kubernetes cluster.
+func (c conversionClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	cObj, ok := obj.(client.Object)
+	if !ok {
+		return errors.Errorf("%T does not implement client.Object", obj)
+	}
+
+	gvk, err := c.GroupVersionKindFor(cObj)
+	if err != nil {
 		return err
 	}
-	return nil
+
+	if !conversionRequired(gvk) {
+		return c.internalClient.Apply(ctx, obj, opts...)
+	}
+
+	preferredVersion := c.preferredVersion()
+	converter, err := converterFor(gvk, preferredVersion)
+	if err != nil {
+		return err
+	}
+
+	spokeObj, err := newClientObject(c.internalClient.Scheme(), converter.SpokeGroupVersionKind())
+	if err != nil {
+		return err
+	}
+	if err := converter.ConvertFromHub(cObj, spokeObj); err != nil {
+		return err
+	}
+
+	spokeApplyConfiguration, ok := spokeObj.(runtime.ApplyConfiguration)
+	if !ok {
+		return errors.Errorf("%T does not implement runtime.ApplyConfiguration", spokeObj)
+	}
+
+	if err := c.internalClient.Apply(ctx, spokeApplyConfiguration, opts...); err != nil {
+		return err
+	}
+	return converter.ConvertToHub(spokeObj, cObj)
 }
 
-func (c conversionClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
-	// FIXME
-	panic("implement me")
-}
-
+// Create saves the object obj in the Kubernetes cluster.
 func (c conversionClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	gvk, err := c.GroupVersionKindFor(obj)
 	if err != nil {
@@ -171,20 +207,21 @@ func (c conversionClient) Create(ctx context.Context, obj client.Object, opts ..
 		return err
 	}
 
-	spokeObj, err := c.newObj(converter.GroupVersionKind())
+	spokeObj, err := newClientObject(c.internalClient.Scheme(), converter.SpokeGroupVersionKind())
 	if err != nil {
 		return err
 	}
-	if err := converter.ConvertFrom(obj, spokeObj); err != nil {
+	if err := converter.ConvertFromHub(obj, spokeObj); err != nil {
 		return err
 	}
 
 	if err := c.internalClient.Create(ctx, spokeObj, opts...); err != nil {
 		return err
 	}
-	return converter.ConvertTo(spokeObj, obj)
+	return converter.ConvertToHub(spokeObj, obj)
 }
 
+// Delete deletes the given obj from Kubernetes cluster.
 func (c conversionClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	gvk, err := c.GroupVersionKindFor(obj)
 	if err != nil {
@@ -201,20 +238,21 @@ func (c conversionClient) Delete(ctx context.Context, obj client.Object, opts ..
 		return err
 	}
 
-	spokeObj, err := c.newObj(converter.GroupVersionKind())
+	spokeObj, err := newClientObject(c.internalClient.Scheme(), converter.SpokeGroupVersionKind())
 	if err != nil {
 		return err
 	}
-	if err := converter.ConvertFrom(obj, spokeObj); err != nil {
+	if err := converter.ConvertFromHub(obj, spokeObj); err != nil {
 		return err
 	}
 
 	if err := c.internalClient.Delete(ctx, spokeObj, opts...); err != nil {
 		return err
 	}
-	return converter.ConvertTo(spokeObj, obj)
+	return converter.ConvertToHub(spokeObj, obj)
 }
 
+// Update updates the given obj in the Kubernetes cluster.
 func (c conversionClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	gvk, err := c.GroupVersionKindFor(obj)
 	if err != nil {
@@ -225,9 +263,10 @@ func (c conversionClient) Update(ctx context.Context, obj client.Object, opts ..
 		return c.internalClient.Update(ctx, obj, opts...)
 	}
 
-	panic("implement me")
+	return errors.New("Update must not be used when conversion is required. Use patch instead")
 }
 
+// Patch patches the given obj in the Kubernetes cluster.
 func (c conversionClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	gvk, err := c.GroupVersionKindFor(obj)
 	if err != nil {
@@ -244,30 +283,21 @@ func (c conversionClient) Patch(ctx context.Context, obj client.Object, patch cl
 		return err
 	}
 
-	spokeObj, err := c.newObj(converter.GroupVersionKind())
+	spokeObj, err := newClientObject(c.internalClient.Scheme(), converter.SpokeGroupVersionKind())
 	if err != nil {
 		return err
 	}
-	if err := converter.ConvertFrom(obj, spokeObj); err != nil {
+	if err := converter.ConvertFromHub(obj, spokeObj); err != nil {
 		return err
 	}
 
-	hubPatch, ok := patch.(Patch)
-	if !ok {
-		return errors.Errorf("%T does not implement conversion.client.Patch", patch)
-	}
-
-	spokePatch, err := hubPatch.ConversionPatch(c.internalClient.Scheme(), converter)
-	if err != nil {
+	if err := c.internalClient.Patch(ctx, spokeObj, patch, opts...); err != nil {
 		return err
 	}
-
-	if err := c.internalClient.Patch(ctx, spokeObj, spokePatch, opts...); err != nil {
-		return err
-	}
-	return converter.ConvertTo(spokeObj, obj)
+	return converter.ConvertToHub(spokeObj, obj)
 }
 
+// DeleteAllOf deletes all objects of the given type matching the given options.
 func (c conversionClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	gvk, err := c.GroupVersionKindFor(obj)
 	if err != nil {
@@ -284,22 +314,21 @@ func (c conversionClient) DeleteAllOf(ctx context.Context, obj client.Object, op
 		return err
 	}
 
-	spokeObj, err := c.newObj(converter.GroupVersionKind())
+	spokeObj, err := newClientObject(c.internalClient.Scheme(), converter.SpokeGroupVersionKind())
 	if err != nil {
 		return err
 	}
-	if err := converter.ConvertFrom(obj, spokeObj); err != nil {
+	if err := converter.ConvertFromHub(obj, spokeObj); err != nil {
 		return err
 	}
 
 	if err := c.internalClient.DeleteAllOf(ctx, spokeObj, opts...); err != nil {
 		return err
 	}
-	return converter.ConvertTo(spokeObj, obj)
+	return converter.ConvertToHub(spokeObj, obj)
 }
 
 func (c conversionClient) Status() client.SubResourceWriter {
-	// FIXME: looks like there is no way to prevent this for the hub version (not sure we have / want to block)
 	return c.internalClient.Status()
 }
 
@@ -333,15 +362,10 @@ func (c conversionClient) preferredVersion() string {
 }
 
 func conversionRequired(gvk schema.GroupVersionKind) bool {
-	switch gvk.GroupVersion() {
-	case vmoprvhub.GroupVersion:
-		return true
-	}
-	return false
+	return gvk.GroupVersion() == vmoprvhub.GroupVersion
 }
 
-// FIXME: implement test to check all the GVK/preferred versions have a converter
-func converterFor(gvk schema.GroupVersionKind, preferredVersion string) (vmoprconversion.ConvertibleWrapper, error) {
+func converterFor(gvk schema.GroupVersionKind, preferredVersion string) (conversion.ConvertibleWrapper, error) {
 	switch preferredVersion {
 	case vmoprv1alpha2.GroupVersion.Version:
 		switch gvk {
@@ -370,11 +394,11 @@ func converterFor(gvk schema.GroupVersionKind, preferredVersion string) (vmoprco
 			return &vmoprv1alpha5conversion.VirtualMachineSetResourcePolicyConvertibleWrapper{}, nil
 		}
 	}
-	return nil, errors.Errorf("can't find a converter for %s", gvk)
+	return nil, errors.Errorf("can't find a converter from %s to %s", gvk, preferredVersion)
 }
 
-func (c conversionClient) newObj(gvk schema.GroupVersionKind) (client.Object, error) {
-	vObjRaw, err := c.internalClient.Scheme().New(gvk)
+func newClientObject(s *runtime.Scheme, gvk schema.GroupVersionKind) (client.Object, error) {
+	vObjRaw, err := s.New(gvk)
 	if err != nil {
 		return nil, err
 	}

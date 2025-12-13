@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package util contains utility functions for working with and implementing Controllers.
-package util //nolint:revive
+// Package v1alpha5 implements conversion from vm operator v1alpha5 types.
+package v1alpha5

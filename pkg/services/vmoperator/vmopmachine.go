@@ -42,7 +42,7 @@ import (
 	capvcontext "sigs.k8s.io/cluster-api-provider-vsphere/pkg/context"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	vmoprconversionutil "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/util"
+	conversionutil "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/util"
 	infrautilv1 "sigs.k8s.io/cluster-api-provider-vsphere/pkg/util"
 )
 
@@ -375,7 +375,8 @@ func (v *VmopMachineService) GetHostInfo(ctx context.Context, machineCtx capvcon
 		return "", err
 	}
 
-	return vmOperatorVM.Status.Host, nil
+	// Note: this was status.Host in v1alpha2 API version.
+	return vmOperatorVM.Status.NodeName, nil
 }
 
 func (v *VmopMachineService) reconcileVMOperatorVM(ctx context.Context, supervisorMachineCtx *vmware.SupervisorMachineContext, vmOperatorVM *vmoprvhub.VirtualMachine) error {
@@ -402,7 +403,9 @@ func (v *VmopMachineService) reconcileVMOperatorVM(ctx context.Context, supervis
 		minHardwareVersion = int32(hwVersion)
 	}
 
-	_, err := vmoprconversionutil.CreateOrPatch(ctx, v.Client, vmOperatorVM, func() error {
+	// NOTE: use a CreateOrPatch implementation that can handle conversion from versions that exist in the supervisor
+	// and the internal hub version used in the reconcilers.
+	_, err := conversionutil.CreateOrPatch(ctx, v.Client, vmOperatorVM, func() error {
 		// Define a new VM Operator virtual machine.
 		// NOTE: Set field-by-field in order to preserve changes made directly
 		//  to the VirtualMachine spec by other sources (e.g. the cloud provider)

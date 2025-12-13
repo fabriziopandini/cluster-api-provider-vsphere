@@ -27,8 +27,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	vmoprconversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
+	conversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 )
+
+// FIXME: consider if to move CreateOrPatch int client pkg.
 
 // CreateOrPatch attempts to fetch the given object from the Kubernetes cluster.
 // If the object didn't exist, MutateFn will be called, and it will be created.
@@ -55,7 +57,7 @@ import (
 // Changes to the status sub-resource will only be applied if the object
 // already exist. To change the status on object creation, the easiest
 // way is to requeue the object in the controller if OperationResult is
-// OperationResultCreated
+// OperationResultCreated.
 func CreateOrPatch(ctx context.Context, c client.Client, obj client.Object, f controllerutil.MutateFn) (controllerutil.OperationResult, error) {
 	key := client.ObjectKeyFromObject(obj)
 	if err := c.Get(ctx, key, obj); err != nil {
@@ -74,8 +76,19 @@ func CreateOrPatch(ctx context.Context, c client.Client, obj client.Object, f co
 	}
 
 	// Create patches for the object and its possible status.
-	objPatch := vmoprconversionclient.MergeFrom(obj.DeepCopyObject().(client.Object))
-	statusPatch := vmoprconversionclient.MergeFrom(obj.DeepCopyObject().(client.Object))
+	objPatch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+	statusPatch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+	if patchCreator, ok := obj.(conversionclient.MergePatchCreator); ok {
+		var err error
+		objPatch, err = patchCreator.MergeFrom(obj.DeepCopyObject().(client.Object))
+		if err != nil {
+			return controllerutil.OperationResultNone, err
+		}
+		statusPatch, err = patchCreator.MergeFrom(obj.DeepCopyObject().(client.Object))
+		if err != nil {
+			return controllerutil.OperationResultNone, err
+		}
+	}
 
 	// Create a copy of the original object as well as converting that copy to
 	// unstructured data.

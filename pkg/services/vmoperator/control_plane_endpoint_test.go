@@ -22,7 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	netopv1 "github.com/vmware-tanzu/net-operator-api/api/v1alpha1"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
+	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	ncpv1 "github.com/vmware-tanzu/vm-operator/external/ncp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -76,11 +76,12 @@ func createDefaultNetwork(ctx context.Context, clusterCtx *vmware.ClusterContext
 func updateVMServiceWithVIP(ctx context.Context, clusterCtx *vmware.ClusterContext, c ctrlclient.Client, cpService CPService, vip string) {
 	vmService := getVirtualMachineService(ctx, clusterCtx, c, cpService)
 
-	s := &vmoprv1.VirtualMachineService{}
+	// NOTE: use vm-operator native types for testing (the reconciler uses the internal hub version).
+	s := &vmoprv1alpha2.VirtualMachineService{}
 	err := c.Get(ctx, ctrlclient.ObjectKeyFromObject(vmService), s)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	s.Status.LoadBalancer.Ingress = []vmoprv1.LoadBalancerIngress{{IP: vip}}
+	s.Status.LoadBalancer.Ingress = []vmoprv1alpha2.LoadBalancerIngress{{IP: vip}}
 	err = c.Status().Update(ctx, s)
 	Expect(err).ShouldNot(HaveOccurred())
 }

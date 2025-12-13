@@ -19,8 +19,8 @@ package hub
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
-	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	conversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 // ResourcePoolSpec defines a Logical Grouping of workloads that share resource
@@ -30,19 +30,6 @@ type ResourcePoolSpec struct {
 
 	// Name describes the name of the ResourcePool grouping.
 	Name string `json:"name,omitempty"`
-
-	/*
-		// +optional
-
-		// Reservations describes the guaranteed resources reserved for the
-		// ResourcePool.
-		Reservations VirtualMachineResourceSpec `json:"reservations,omitempty"`
-
-		// +optional
-
-		// Limits describes the limit to resources available to the ResourcePool.
-		Limits VirtualMachineResourceSpec `json:"limits,omitempty"`
-	*/
 }
 
 // VirtualMachineSetResourcePolicySpec defines the desired state of
@@ -62,23 +49,6 @@ type VirtualMachineSetResourcePolicyStatus struct {
 	*/
 }
 
-/*
-// ResourcePoolStatus describes the observed state of a vSphere child
-// resource pool created for the Spec.ResourcePool.Name.
-type ResourcePoolStatus struct {
-	ClusterMoID           string `json:"clusterMoID"`
-	ChildResourcePoolMoID string `json:"childResourcePoolMoID"`
-}
-
-// VSphereClusterModuleStatus describes the observed state of a vSphere
-// cluster module.
-type VSphereClusterModuleStatus struct {
-	GroupName   string `json:"groupName"`
-	ModuleUuid  string `json:"moduleUUID"` //nolint:revive
-	ClusterMoID string `json:"clusterMoID"`
-}
-*/
-
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
@@ -91,12 +61,7 @@ type VirtualMachineSetResourcePolicy struct {
 	Spec   VirtualMachineSetResourcePolicySpec   `json:"spec,omitempty"`
 	Status VirtualMachineSetResourcePolicyStatus `json:"status,omitempty"`
 
-	// FIXME: think about name
-	Convertible vmoprconversionmeta.TypeMetaConvertible `json:"convertible,omitempty"`
-}
-
-func (p *VirtualMachineSetResourcePolicy) NamespacedName() string {
-	return p.Namespace + "/" + p.Name
+	Source conversionmeta.SourceTypeMeta `json:"source,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -112,14 +77,14 @@ func init() {
 	objectTypes = append(objectTypes, &VirtualMachineSetResourcePolicy{}, &VirtualMachineSetResourcePolicyList{})
 }
 
-var _ vmoprconversion.Hub = &VirtualMachineSetResourcePolicy{}
+var _ conversion.Hub = &VirtualMachineSetResourcePolicy{}
 
-func (p *VirtualMachineSetResourcePolicy) Hub() {}
-
-func (p *VirtualMachineSetResourcePolicy) SetConvertibleAPIVersion(v string) {
-	p.Convertible.APIVersion = v
+// SetSourceAPIVersion set the API version this object is converted from.
+func (p *VirtualMachineSetResourcePolicy) SetSourceAPIVersion(v string) {
+	p.Source.APIVersion = v
 }
 
-func (p *VirtualMachineSetResourcePolicy) GetConvertibleAPIVersion() string {
-	return p.Convertible.APIVersion
+// GetSourceAPIVersion grt the API version this object is converted from.
+func (p *VirtualMachineSetResourcePolicy) GetSourceAPIVersion() string {
+	return p.Source.APIVersion
 }

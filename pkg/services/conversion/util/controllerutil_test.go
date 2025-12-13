@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	vmoprconversionutil "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/util"
+	conversionutil "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/util"
 )
 
 var _ = Describe("Controllerutil", func() {
@@ -45,7 +45,7 @@ var _ = Describe("Controllerutil", func() {
 		BeforeEach(func() {
 			deploy = &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("deploy-%d", rand.Int31()),
+					Name:      fmt.Sprintf("deploy-%d", rand.Int31()), //nolint:gosec
 					Namespace: "default",
 				},
 			}
@@ -103,7 +103,7 @@ var _ = Describe("Controllerutil", func() {
 		}
 
 		It("creates a new object if one doesn't exists", func(ctx SpecContext) {
-			op, err := vmoprconversionutil.CreateOrPatch(ctx, c, deploy, specr)
+			op, err := conversionutil.CreateOrPatch(ctx, c, deploy, specr)
 
 			By("returning no error")
 			Expect(err).NotTo(HaveOccurred())
@@ -357,6 +357,6 @@ type errorReader struct {
 	client.Client
 }
 
-func (e errorReader) Get(ctx context.Context, key client.ObjectKey, into client.Object, opts ...client.GetOption) error {
+func (e errorReader) Get(_ context.Context, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
 	return fmt.Errorf("unexpected error")
 }

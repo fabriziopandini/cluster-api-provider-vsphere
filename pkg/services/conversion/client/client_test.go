@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	conversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 var (
@@ -66,7 +66,7 @@ func Test_conversionClient_Get(t *testing.T) {
 					Name:      "test-vm",
 					Namespace: "test-ns",
 				},
-				Convertible: vmoprconversionmeta.TypeMetaConvertible{
+				Source: conversionmeta.SourceTypeMeta{
 					APIVersion: vmoprv1alpha2.GroupVersion.String(),
 				},
 			},
@@ -86,7 +86,7 @@ func Test_conversionClient_Get(t *testing.T) {
 					Name:      "test-vm",
 					Namespace: "test-ns",
 				},
-				Convertible: vmoprconversionmeta.TypeMetaConvertible{
+				Source: conversionmeta.SourceTypeMeta{
 					APIVersion: vmoprv1alpha5.GroupVersion.String(),
 				},
 			},
@@ -145,7 +145,7 @@ func Test_conversionClient_List(t *testing.T) {
 						Name:      "test-vm",
 						Namespace: "test-ns",
 					},
-					Convertible: vmoprconversionmeta.TypeMetaConvertible{
+					Source: conversionmeta.SourceTypeMeta{
 						APIVersion: vmoprv1alpha2.GroupVersion.String(),
 					},
 				},
@@ -170,7 +170,7 @@ func Test_conversionClient_List(t *testing.T) {
 				g.Fail(fmt.Sprintf("Get() error = %v, wantErr %v", err, tt.wantErr))
 			}
 
-			g.Expect(len(hubObjs.Items)).To(Equal(len(tt.wantHubObjs)))
+			g.Expect(hubObjs.Items).To(HaveLen(len(tt.wantHubObjs)))
 			for i, wantHubObj := range tt.wantHubObjs {
 				wantHubObj.SetResourceVersion(hubObjs.Items[i].GetResourceVersion())
 				g.Expect(&hubObjs.Items[i]).To(Equal(wantHubObj))
@@ -197,7 +197,7 @@ func Test_conversionClient_Create(t *testing.T) {
 				Spec: vmoprvhub.VirtualMachineSpec{
 					ClassName: "test-class",
 				},
-				Convertible: vmoprconversionmeta.TypeMetaConvertible{
+				Source: conversionmeta.SourceTypeMeta{
 					APIVersion: vmoprv1alpha2.GroupVersion.String(),
 				},
 			},
@@ -253,7 +253,7 @@ func Test_conversionClient_Patch(t *testing.T) {
 				Spec: vmoprvhub.VirtualMachineSpec{
 					ClassName: "test-class",
 				},
-				Convertible: vmoprconversionmeta.TypeMetaConvertible{
+				Source: conversionmeta.SourceTypeMeta{
 					APIVersion: vmoprv1alpha2.GroupVersion.String(),
 				},
 			},
@@ -277,9 +277,13 @@ func Test_conversionClient_Patch(t *testing.T) {
 			}
 
 			err := c.Create(ctx, tt.hubObj)
+			g.Expect(err).ToNot(HaveOccurred())
 			hubObjModified := tt.modifyFunc(tt.hubObj.(*vmoprvhub.VirtualMachine))
 
-			err = c.Patch(ctx, hubObjModified, MergeFrom(tt.hubObj))
+			conversionPatch, err := c.MergeFrom(tt.hubObj)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			err = c.Patch(ctx, hubObjModified, conversionPatch)
 			if (err != nil) != tt.wantErr {
 				g.Fail(fmt.Sprintf("Get() error = %v, wantErr %v", err, tt.wantErr))
 			}

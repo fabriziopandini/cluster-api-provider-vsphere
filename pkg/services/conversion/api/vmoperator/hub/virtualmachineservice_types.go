@@ -19,8 +19,8 @@ package hub
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
-	vmoprconversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
+	conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	conversionmeta "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/meta"
 )
 
 // VirtualMachineServiceType string describes ingress methods for a service.
@@ -113,50 +113,6 @@ type VirtualMachineServiceSpec struct {
 	// Selector, that is used to match this VirtualMachineService with the set
 	// of VirtualMachines that should back this VirtualMachineService.
 	Selector map[string]string `json:"selector,omitempty"`
-
-	/*
-		// +optional
-
-		// LoadBalancer will get created with the IP specified in this field.
-		// Only applies to VirtualMachineService Type: LoadBalancer
-		// This feature depends on whether the underlying load balancer provider
-		// supports specifying the loadBalancerIP when a load balancer is created.
-		// This field will be ignored if the provider does not support the feature.
-		// Deprecated: This field was under-specified and its meaning varies across implementations.
-		// Using it is non-portable and it may not support dual-stack.
-		// Users are encouraged to use implementation-specific annotations when available.
-		LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
-
-		// +optional
-
-		// LoadBalancerSourceRanges is an array of IP addresses in the format of
-		// CIDRs, for example: 103.21.244.0/22 and 10.0.0.0/24.
-		// If specified and supported by the load balancer provider, this will
-		// restrict ingress traffic to the specified client IPs. This field will be
-		// ignored if the provider does not support the feature.
-		LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
-
-		// +optional
-
-		// ClusterIP is the IP address of the service and is usually assigned
-		// randomly by the master. If an address is specified manually and is not in
-		// use by others, it will be allocated to the service; otherwise, creation
-		// of the service will fail. This field can not be changed through updates.
-		// Valid values are "None", empty string (""), or a valid IP address. "None"
-		// can be specified for headless services when proxying is not required.
-		// Only applies to types ClusterIP and LoadBalancer.
-		// Ignored if type is ExternalName.
-		// More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies
-		ClusterIP string `json:"clusterIp,omitempty"`
-
-		// +optional
-
-		// ExternalName is the external reference that kubedns or equivalent will
-		// return as a CNAME record for this service. No proxying will be involved.
-		// Must be a valid RFC-1123 hostname (https://tools.ietf.org/html/rfc1123)
-		// and requires Type to be ExternalName.
-		ExternalName string `json:"externalName,omitempty"`
-	*/
 }
 
 // VirtualMachineServiceStatus defines the observed state of
@@ -184,12 +140,7 @@ type VirtualMachineService struct {
 	Spec   VirtualMachineServiceSpec   `json:"spec,omitempty"`
 	Status VirtualMachineServiceStatus `json:"status,omitempty"`
 
-	// FIXME: think about name
-	Convertible vmoprconversionmeta.TypeMetaConvertible `json:"convertible,omitempty"`
-}
-
-func (s *VirtualMachineService) NamespacedName() string {
-	return s.Namespace + "/" + s.Name
+	Source conversionmeta.SourceTypeMeta `json:"source,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -208,14 +159,14 @@ func init() {
 	)
 }
 
-var _ vmoprconversion.Hub = &VirtualMachineService{}
+var _ conversion.Hub = &VirtualMachineService{}
 
-func (s *VirtualMachineService) Hub() {}
-
-func (s *VirtualMachineService) SetConvertibleAPIVersion(v string) {
-	s.Convertible.APIVersion = v
+// SetSourceAPIVersion set the API version this object is converted from.
+func (s *VirtualMachineService) SetSourceAPIVersion(v string) {
+	s.Source.APIVersion = v
 }
 
-func (s *VirtualMachineService) GetConvertibleAPIVersion() string {
-	return s.Convertible.APIVersion
+// GetSourceAPIVersion grt the API version this object is converted from.
+func (s *VirtualMachineService) GetSourceAPIVersion() string {
+	return s.Source.APIVersion
 }

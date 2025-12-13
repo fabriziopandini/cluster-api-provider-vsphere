@@ -22,7 +22,6 @@ import (
 	"path"
 
 	"github.com/pkg/errors"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,6 +43,7 @@ import (
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	vcsimhelpers "sigs.k8s.io/cluster-api-provider-vsphere/internal/test/helpers/vcsim"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	conversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/session"
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/util"
 	"sigs.k8s.io/cluster-api-provider-vsphere/test/framework/vmoperator"
@@ -317,8 +317,14 @@ func (r *VirtualMachineReconciler) getVCenterSession(ctx context.Context) (*sess
 
 // SetupWithManager will add watches for this controller.
 func (r *VirtualMachineReconciler) SetupWithManager(_ context.Context, mgr ctrl.Manager, options controller.Options) error {
-	err := ctrl.NewControllerManagedBy(mgr).
-		For(&vmoprv1.VirtualMachine{}).
+	// NOTE: use vm-operator native types for watches (the reconciler uses the internal hub version).
+	vm, err := conversionclient.NewWatchObject(mgr.GetClient(), vmoprvhub.GroupVersion.WithKind("VirtualMachine"))
+	if err != nil {
+		return err
+	}
+
+	err = ctrl.NewControllerManagedBy(mgr).
+		For(vm).
 		WithOptions(options).
 		Complete(r)
 

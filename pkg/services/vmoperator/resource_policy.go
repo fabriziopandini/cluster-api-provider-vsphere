@@ -26,7 +26,7 @@ import (
 
 	"sigs.k8s.io/cluster-api-provider-vsphere/pkg/context/vmware"
 	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
-	vmoprconversionutil "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/util"
+	conversionutil "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/util"
 )
 
 // RPService represents the ability to reconcile a VirtualMachineSetResourcePolicy via vmoperator.
@@ -56,7 +56,9 @@ func (s *RPService) newVirtualMachineSetResourcePolicy(clusterCtx *vmware.Cluste
 func (s *RPService) createOrPatchVirtualMachineSetResourcePolicy(ctx context.Context, clusterCtx *vmware.ClusterContext) (*vmoprvhub.VirtualMachineSetResourcePolicy, error) {
 	vmResourcePolicy := s.newVirtualMachineSetResourcePolicy(clusterCtx)
 
-	_, err := vmoprconversionutil.CreateOrPatch(ctx, s.Client, vmResourcePolicy, func() error {
+	// NOTE: use a CreateOrPatch implementation that can handle conversion from versions that exist in the supervisor
+	// and the internal hub version used in the reconcilers.
+	_, err := conversionutil.CreateOrPatch(ctx, s.Client, vmResourcePolicy, func() error {
 		vmResourcePolicy.Spec = vmoprvhub.VirtualMachineSetResourcePolicySpec{
 			ResourcePool: vmoprvhub.ResourcePoolSpec{
 				Name: clusterCtx.Cluster.Name,

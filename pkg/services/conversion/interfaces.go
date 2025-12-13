@@ -16,8 +16,6 @@ limitations under the License.
 
 package conversion
 
-// FIXME: rules for import name consistency, import rule restrictions (no vmoprv1 outside of this folder)
-
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -26,16 +24,18 @@ import (
 
 // ConvertibleWrapper defines a wrapper to an object that make the object convertible i.e. it can be converted to/from a hub type.
 type ConvertibleWrapper interface {
-	GroupVersionKind() schema.GroupVersionKind
-	ConvertTo(src runtime.Object, dst runtime.Object) error
-	ConvertFrom(src runtime.Object, dst runtime.Object) error
+	SpokeGroupVersionKind() schema.GroupVersionKind
+	ConvertToHub(src runtime.Object, dst runtime.Object) error
+	ConvertFromHub(src runtime.Object, dst runtime.Object) error
 }
 
 // Hub marks that a given type is the hub type for conversion.
 type Hub interface {
 	client.Object
-	Hub()
-	// FIXME: think about name
-	SetConvertibleAPIVersion(string)
-	GetConvertibleAPIVersion() string
+
+	// SetSourceAPIVersion set the API version this object is converted from.
+	SetSourceAPIVersion(string)
+
+	// GetSourceAPIVersion get the API version this object is converted from.
+	GetSourceAPIVersion() string
 }

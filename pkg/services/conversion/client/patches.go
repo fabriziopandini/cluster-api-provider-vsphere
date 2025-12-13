@@ -21,60 +21,116 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
-	vmoprconversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
+	conversion "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion"
 )
 
-// Patch is a patch that can be applied to a Kubernetes object.
-type Patch interface {
-	client.Patch
+// MergePatchCreator is a client that can create merge or strategic merge patch.
+// FIXME: Pluggable in CABPK/KCP & Patch helper.
+type MergePatchCreator interface {
+	// MergeFrom creates a Patch that patches using the merge-patch strategy with the given object as base.
+	MergeFrom(obj client.Object) (client.Patch, error)
 
-	ConversionPatch(scheme *runtime.Scheme, converter vmoprconversion.ConvertibleWrapper) (client.Patch, error)
+	// MergeFromWithOptions creates a Patch that patches using the merge-patch strategy with the given object as base.
+	MergeFromWithOptions(obj client.Object, opts ...client.MergeFromOption) (client.Patch, error)
+
+	// StrategicMergeFrom creates a Patch that patches using the strategic-merge-patch strategy with the given object as base.
+	StrategicMergeFrom(obj client.Object, opts ...client.MergeFromOption) (client.Patch, error)
 }
 
-type mergeFromPatch struct {
-	client.Patch
+// conversionClient must implement WatchObjectCreator.
+var _ MergePatchCreator = &conversionClient{}
+
+// MergeFrom creates a Patch that patches using the merge-patch strategy with the given object as base.
+func (c conversionClient) MergeFrom(obj client.Object) (client.Patch, error) {
+	return c.newMergePatch(types.MergePatchType, obj)
+}
+
+// MergeFromWithOptions creates a Patch that patches using the merge-patch strategy with the given object as base.
+func (c conversionClient) MergeFromWithOptions(obj client.Object, opts ...client.MergeFromOption) (client.Patch, error) {
+	return c.newMergePatch(types.MergePatchType, obj, opts...)
+}
+
+// StrategicMergeFrom creates a Patch that patches using the strategic-merge-patch strategy with the given object as base.
+func (c conversionClient) StrategicMergeFrom(obj client.Object, opts ...client.MergeFromOption) (client.Patch, error) {
+	return c.newMergePatch(types.StrategicMergePatchType, obj, opts...)
+}
+
+func (c conversionClient) newMergePatch(patchType types.PatchType, obj client.Object, opts ...client.MergeFromOption) (client.Patch, error) {
+	gvk, err := c.GroupVersionKindFor(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	if !conversionRequired(gvk) {
+		if patchType == types.StrategicMergePatchType {
+			return client.StrategicMergeFrom(obj, opts...), nil
+		}
+		return client.MergeFromWithOptions(obj, opts...), nil
+	}
+
+	preferredVersion := c.preferredVersion()
+	converter, err := converterFor(gvk, preferredVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	return &conversionMergePatch{
+		patchType: patchType,
+		from:      obj,
+		opts:      opts,
+		scheme:    c.Scheme(),
+		converter: converter,
+	}, nil
+}
+
+type conversionMergePatch struct {
 	patchType types.PatchType
 	from      client.Object
 	opts      []client.MergeFromOption
+
+	scheme    *runtime.Scheme
+	converter conversion.ConvertibleWrapper
 }
 
-func MergeFrom(obj client.Object) client.Patch {
-	return &mergeFromPatch{Patch: client.MergeFrom(obj), patchType: types.MergePatchType, from: obj}
+// conversionClient must implement client.Patch.
+var _ client.Patch = &conversionMergePatch{}
+
+// Type is the PatchType of the patch.
+func (p *conversionMergePatch) Type() types.PatchType {
+	return p.patchType
 }
 
-func MergeFromWithOptions(obj client.Object, opts ...client.MergeFromOption) client.Patch {
-	return &mergeFromPatch{Patch: client.MergeFromWithOptions(obj, opts...), patchType: types.MergePatchType, from: obj, opts: opts}
-}
-
-func StrategicMergeFrom(obj client.Object, opts ...client.MergeFromOption) client.Patch {
-	return &mergeFromPatch{Patch: client.MergeFromWithOptions(obj, opts...), patchType: types.StrategicMergePatchType, from: obj, opts: opts}
-}
-
-func (p *mergeFromPatch) ConversionPatch(scheme *runtime.Scheme, converter vmoprconversion.ConvertibleWrapper) (client.Patch, error) {
-	hubFromObj, ok := p.from.(vmoprconversion.Hub)
-	if !ok {
-		return nil, errors.New("obj must implement conversion.Hub")
+// Data is the raw data representing the patch.
+func (p *conversionMergePatch) Data(obj client.Object) ([]byte, error) {
+	gvk, err := apiutil.GVKForObject(obj, p.scheme)
+	if err != nil {
+		return nil, err
 	}
 
-	spokeFromObjRaw, err := scheme.New(converter.GroupVersionKind())
+	if !conversionRequired(gvk) {
+		if p.patchType == types.StrategicMergePatchType {
+			return client.StrategicMergeFrom(p.from, p.opts...).Data(obj)
+		}
+		return client.MergeFromWithOptions(p.from, p.opts...).Data(obj)
+	}
+
+	spokeFromObjRaw, err := p.scheme.New(p.converter.SpokeGroupVersionKind())
 	if err != nil {
 		return nil, err
 	}
 
 	spokeFromObj, ok := spokeFromObjRaw.(client.Object)
 	if !ok {
-		// FIXME
+		return nil, errors.Errorf("%T does not implement client.Object", spokeFromObjRaw)
 	}
-	if err := converter.ConvertFrom(hubFromObj, spokeFromObj); err != nil {
-		// FIXME:
+	if err := p.converter.ConvertFromHub(p.from, spokeFromObj); err != nil {
+		return nil, err
 	}
 
 	if p.patchType == types.StrategicMergePatchType {
-		return client.StrategicMergeFrom(spokeFromObj, p.opts...), nil
+		return client.StrategicMergeFrom(spokeFromObj, p.opts...).Data(obj)
 	}
-	if len(p.opts) > 0 {
-		return client.MergeFromWithOptions(spokeFromObj, p.opts...), nil
-	}
-	return client.MergeFrom(spokeFromObj), nil
+	return client.MergeFromWithOptions(spokeFromObj, p.opts...).Data(obj)
 }

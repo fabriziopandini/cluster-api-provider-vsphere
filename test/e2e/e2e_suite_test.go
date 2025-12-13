@@ -27,7 +27,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
+	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -355,7 +355,7 @@ func initScheme() *runtime.Scheme {
 		_ = storagev1.AddToScheme(sc)
 		_ = topologyv1.AddToScheme(sc)
 		_ = vmoprvhub.AddToScheme(sc)
-		_ = vmoprv1.AddToScheme(sc)
+		_ = vmoprv1alpha2.AddToScheme(sc)
 		_ = vmwarev1.AddToScheme(sc)
 	}
 	return sc
