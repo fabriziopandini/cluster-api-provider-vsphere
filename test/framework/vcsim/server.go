@@ -27,8 +27,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
-	. "sigs.k8s.io/cluster-api/test/framework/ginkgoextensions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	. "sigs.k8s.io/cluster-api/test/framework/ginkgoextensions"
 
 	vcsimv1 "sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/api/v1alpha1"
 )
@@ -49,11 +50,6 @@ func Create(ctx context.Context, c client.Client) error {
 		return err
 	}
 
-	if _, err := Get(ctx, c); err != nil {
-		// Try best effort deletion of the unused VCenterSimulator before returning an error.
-		_ = Delete(ctx, c, false)
-		return err
-	}
 	return nil
 }
 

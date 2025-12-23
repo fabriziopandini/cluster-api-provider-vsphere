@@ -21,7 +21,7 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
+	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,6 +38,7 @@ import (
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
+	conversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 	vcsimv1 "sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/api/v1alpha1"
 )
 
@@ -53,27 +54,27 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 			},
 		}
 
-		cluster := &clusterv1.Cluster{
+		cluster := &clusterv1beta1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
 				UID:       "bar",
 			},
-			Spec: clusterv1.ClusterSpec{
-				InfrastructureRef: clusterv1.ContractVersionedObjectReference{
-					APIGroup: vmwarev1.GroupVersion.Group,
-					Kind:     "VSphereCluster",
-					Name:     vsphereCluster.Name,
+			Spec: clusterv1beta1.ClusterSpec{
+				InfrastructureRef: &corev1.ObjectReference{
+					APIVersion: vmwarev1.GroupVersion.String(),
+					Kind:       "VSphereCluster",
+					Name:       vsphereCluster.Name,
 				},
 			},
 		}
 
-		machine := &clusterv1.Machine{
+		machine := &clusterv1beta1.Machine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
 				Labels: map[string]string{
-					clusterv1.ClusterNameLabel: cluster.Name,
+					clusterv1beta1.ClusterNameLabel: cluster.Name,
 				},
 			},
 		}
@@ -93,7 +94,8 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 			},
 		}
 
-		virtualMachine := &vmoprv1.VirtualMachine{
+		// NOTE: use vm-operator native types for testing (the reconciler uses the internal hub version).
+		virtualMachine := &vmoprv1alpha2.VirtualMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
@@ -140,7 +142,9 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 
 		r := VirtualMachineReconciler{
-			Client:          crclient,
+			// NOTE: use a client that can handle conversion from versions that exist in the supervisor
+			// and the internal hub version used in the reconcilers.
+			Client:          conversionclient.New(crclient),
 			InMemoryManager: inmemoryMgr,
 			APIServerMux:    apiServerMux,
 		}
@@ -175,31 +179,31 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 			},
 		}
 
-		cluster := &clusterv1.Cluster{
+		cluster := &clusterv1beta1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
 				UID:       "bar",
 			},
-			Spec: clusterv1.ClusterSpec{
-				InfrastructureRef: clusterv1.ContractVersionedObjectReference{
-					APIGroup: vmwarev1.GroupVersion.Group,
-					Kind:     "VSphereCluster",
-					Name:     vsphereCluster.Name,
+			Spec: clusterv1beta1.ClusterSpec{
+				InfrastructureRef: &corev1.ObjectReference{
+					APIVersion: vmwarev1.GroupVersion.String(),
+					Kind:       "VSphereCluster",
+					Name:       vsphereCluster.Name,
 				},
 			},
 		}
 
-		machine := &clusterv1.Machine{
+		machine := &clusterv1beta1.Machine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
 				Labels: map[string]string{
-					clusterv1.ClusterNameLabel: cluster.Name,
+					clusterv1beta1.ClusterNameLabel: cluster.Name,
 				},
 			},
-			Spec: clusterv1.MachineSpec{
-				Bootstrap: clusterv1.Bootstrap{
+			Spec: clusterv1beta1.MachineSpec{
+				Bootstrap: clusterv1beta1.Bootstrap{
 					DataSecretName: ptr.To("foo"), // this unblocks node provisioning
 				},
 			},
@@ -220,7 +224,8 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 			},
 		}
 
-		virtualMachine := &vmoprv1.VirtualMachine{
+		// NOTE: use vm-operator native types for testing (the reconciler uses the internal hub version).
+		virtualMachine := &vmoprv1alpha2.VirtualMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "foo",
 				Name:      "bar",
@@ -236,13 +241,13 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 					vcsimv1.VMFinalizer, // Adding this to move past the first reconcile
 				},
 			},
-			Status: vmoprv1.VirtualMachineStatus{
+			Status: vmoprv1alpha2.VirtualMachineStatus{
 				// Those values are required to unblock provisioning of node
 				BiosUUID: "foo",
-				Network: &vmoprv1.VirtualMachineNetworkStatus{
+				Network: &vmoprv1alpha2.VirtualMachineNetworkStatus{
 					PrimaryIP4: "1.2.3.4",
 				},
-				PowerState: vmoprv1.VirtualMachinePowerStateOn,
+				PowerState: vmoprv1alpha2.VirtualMachinePowerStateOn,
 			},
 		}
 
@@ -275,7 +280,9 @@ func Test_Reconcile_VirtualMachine(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 
 		r := VirtualMachineReconciler{
-			Client:          crclient,
+			// NOTE: use a client that can handle conversion from versions that exist in the supervisor
+			// and the internal hub version used in the reconcilers.
+			Client:          conversionclient.New(crclient),
 			InMemoryManager: inmemoryMgr,
 			APIServerMux:    apiServerMux,
 		}

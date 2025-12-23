@@ -28,7 +28,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
-	vmoprv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
+	vmoprv1alpha2 "github.com/vmware-tanzu/vm-operator/api/v1alpha2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -61,6 +61,8 @@ import (
 	infrav1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	vmwarev1 "sigs.k8s.io/cluster-api-provider-vsphere/apis/vmware/v1beta1"
 	topologyv1 "sigs.k8s.io/cluster-api-provider-vsphere/internal/apis/topology/v1alpha1"
+	vmoprvhub "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/api/vmoperator/hub"
+	conversionclient "sigs.k8s.io/cluster-api-provider-vsphere/pkg/services/conversion/client"
 	vcsimv1 "sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/api/v1alpha1"
 	"sigs.k8s.io/cluster-api-provider-vsphere/test/infrastructure/vcsim/controllers"
 )
@@ -102,9 +104,11 @@ func init() {
 	_ = infrav1.AddToScheme(scheme)
 	_ = vcsimv1.AddToScheme(scheme)
 	_ = topologyv1.AddToScheme(scheme)
-	_ = vmoprv1.AddToScheme(scheme)
+	_ = vmoprvhub.AddToScheme(scheme)
+	_ = vmoprv1alpha2.AddToScheme(scheme)
 	_ = storagev1.AddToScheme(scheme)
 	_ = vmwarev1.AddToScheme(scheme)
+	_ = apiextensionsv1.AddToScheme(scheme)
 
 	// scheme used for operating in memory.
 	_ = corev1.AddToScheme(inmemoryScheme)
@@ -336,7 +340,9 @@ func setupReconcilers(ctx context.Context, mgr ctrl.Manager, supervisorMode bool
 
 	// Setup reconcilers
 	if err := (&controllers.VCenterSimulatorReconciler{
-		Client:           mgr.GetClient(),
+		// NOTE: use a client that can handle conversion from versions that exist in the supervisor
+		// and the internal hub version used in the reconcilers.
+		Client:           conversionclient.New(mgr.GetClient()),
 		SupervisorMode:   supervisorMode,
 		WatchFilterValue: watchFilterValue,
 	}).SetupWithManager(ctx, mgr, concurrency(vCenterSimulatorConcurrency)); err != nil {
@@ -357,7 +363,9 @@ func setupReconcilers(ctx context.Context, mgr ctrl.Manager, supervisorMode bool
 
 	if supervisorMode {
 		if err := (&controllers.VirtualMachineReconciler{
-			Client:           mgr.GetClient(),
+			// NOTE: use a client that can handle conversion from versions that exist in the supervisor
+			// and the internal hub version used in the reconcilers.
+			Client:           conversionclient.New(mgr.GetClient()),
 			InMemoryManager:  inmemoryManager,
 			APIServerMux:     apiServerMux,
 			WatchFilterValue: watchFilterValue,
@@ -367,7 +375,9 @@ func setupReconcilers(ctx context.Context, mgr ctrl.Manager, supervisorMode bool
 		}
 
 		if err := (&controllers.VMOperatorDependenciesReconciler{
-			Client:           mgr.GetClient(),
+			// NOTE: use a client that can handle conversion from versions that exist in the supervisor
+			// and the internal hub version used in the reconcilers.
+			Client:           conversionclient.New(mgr.GetClient()),
 			WatchFilterValue: watchFilterValue,
 		}).SetupWithManager(ctx, mgr, concurrency(vmOperatorDependenciesConcurrency)); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "VMOperatorDependenciesReconciler")

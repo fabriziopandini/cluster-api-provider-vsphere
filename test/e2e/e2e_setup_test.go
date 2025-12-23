@@ -31,10 +31,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
+
 	"sigs.k8s.io/cluster-api/test/framework"
 	"sigs.k8s.io/cluster-api/test/framework/clusterctl"
 	. "sigs.k8s.io/cluster-api/test/framework/ginkgoextensions"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	vsphereip "sigs.k8s.io/cluster-api-provider-vsphere/test/framework/ip"
 	vspherevcsim "sigs.k8s.io/cluster-api-provider-vsphere/test/framework/vcsim"
@@ -128,7 +129,11 @@ func Setup(specName string, f func(testSpecificSettings func() testSettings), op
 
 		// Enable additional providers depending on testMode and testTarget.
 		if testMode == SupervisorTestMode {
-			runtimeExtensionProviders = append(runtimeExtensionProviders, "vm-operator", "net-operator")
+			vmOperator := "vm-operator"
+			if e2eConfig.HasVariable("VM_OPERATOR_VERSION") {
+				vmOperator = fmt.Sprintf("%s:%s", vmOperator, e2eConfig.MustGetVariable("VM_OPERATOR_VERSION"))
+			}
+			runtimeExtensionProviders = append(runtimeExtensionProviders, vmOperator, "net-operator")
 		}
 		if testTarget == VCSimTestTarget {
 			runtimeExtensionProviders = append(runtimeExtensionProviders, "vcsim")
@@ -230,10 +235,15 @@ func Setup(specName string, f func(testSpecificSettings func() testSettings), op
 }
 
 func createVCSimServer(managementClusterProxy framework.ClusterProxy) {
-	Byf("Creating a vcsim server")
 	Eventually(func() error {
 		return vspherevcsim.Create(ctx, managementClusterProxy.GetClient())
-	}, time.Minute, 3*time.Second).ShouldNot(HaveOccurred(), "Failed to create VCenterSimulator")
+	}, 2*time.Minute, 5*time.Second).ShouldNot(HaveOccurred(), "Failed to create VCenterSimulator")
+
+	if _, err := vspherevcsim.Get(ctx, managementClusterProxy.GetClient()); err != nil {
+		// Try best effort deletion of the unused VCenterSimulator before returning an error.
+		_ = vspherevcsim.Delete(ctx, managementClusterProxy.GetClient(), false)
+		Fail(fmt.Sprintf("unable to create vcsim server: %v", err))
+	}
 }
 
 func allocateIPAddresses(managementClusterProxy framework.ClusterProxy, options *setupOptions) (vsphereip.AddressManager, vsphereip.AddressClaims, map[string]string) {
