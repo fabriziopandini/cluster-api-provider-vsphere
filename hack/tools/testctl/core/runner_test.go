@@ -339,6 +339,7 @@ func Test_runner_parseConfig(t *testing.T) {
 					testExecutorPluginKey: testExecutor,
 					testSelectorPluginKey: testSelector,
 				},
+				nil,
 			)
 
 			rawConfig, err := yaml.Marshal(tt.config)
@@ -717,6 +718,134 @@ func TestRun(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "Skip executor and its hooks and prompts, continue with siblings",
+			config: map[string]any{
+				"run": []any{
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"fail":   true,
+						"runConfig": map[string]any{
+							"skip":         true,
+							"debug":        true,
+							"debugOnError": true,
+						},
+						"runAfter": []any{
+							map[string]any{
+								"plugin": testExecutorPluginKey,
+								"foo":    "cleanup",
+							},
+						},
+						"runOnError": []any{
+							map[string]any{
+								"plugin": testExecutorPluginKey,
+								"foo":    "error",
+							},
+						},
+					},
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"foo":    "next",
+					},
+				},
+			},
+			wantCalls: []string{"exec a=vA, foo=next"},
+		},
+		{
+			name: "Skip selector and its nested actions",
+			config: map[string]any{
+				"run": []any{
+					map[string]any{
+						"plugin": testSelectorPluginKey,
+						"runConfig": map[string]any{
+							"skip": true,
+						},
+						"run": []any{
+							map[string]any{
+								"plugin": testExecutorPluginKey,
+								"fail":   true,
+							},
+						},
+						"runAfter": []any{
+							map[string]any{
+								"plugin": testExecutorPluginKey,
+								"fail":   true,
+							},
+						},
+					},
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"foo":    "next",
+					},
+				},
+			},
+			wantCalls: []string{"exec a=vA, foo=next"},
+		},
+		{
+			name: "False and omitted skip run normally",
+			config: map[string]any{
+				"run": []any{
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"foo":    "explicit",
+						"runConfig": map[string]any{
+							"skip": false,
+						},
+					},
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"foo":    "default",
+					},
+				},
+			},
+			wantCalls: []string{"exec a=vA, foo=explicit", "exec a=vA, foo=default"},
+		},
+		{
+			name: "Skip top level including cleanup and prompts",
+			config: map[string]any{
+				"runConfig": map[string]any{
+					"skip":  true,
+					"debug": true,
+				},
+				"run": []any{
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"fail":   true,
+					},
+				},
+				"runAfter": []any{
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"fail":   true,
+					},
+				},
+			},
+		},
+		{
+			name: "Skip cleanup entry and continue with siblings",
+			config: map[string]any{
+				"run": []any{
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"foo":    "action",
+					},
+				},
+				"runAfter": []any{
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"fail":   true,
+						"runConfig": map[string]any{
+							"skip": true,
+						},
+					},
+					map[string]any{
+						"plugin": testExecutorPluginKey,
+						"foo":    "cleanup",
+					},
+				},
+			},
+			wantCalls: []string{"exec a=vA, foo=action", "exec a=vA, foo=cleanup"},
+		},
 		// TODO: check timeout
 		// TODO: check error management (on a sequence of plugins, on a list of objects)
 	}
@@ -728,22 +857,23 @@ func TestRun(t *testing.T) {
 				calls = append(calls, msg)
 			}
 
+			prompts := []string{}
 			r := newRunner(
 				map[string]any{
 					importerPluginKey:     &importerPlugin{},
 					testExecutorPluginKey: &testExecutorPlugin{logger: logger},
 					testSelectorPluginKey: &testSelectorPlugin{logger: logger},
 				},
+				PrompterFunc(func(_ context.Context, msg string) {
+					prompts = append(prompts, msg)
+				}),
 			)
 
-			prompts := []string{}
-			r.prompter = func(_ context.Context, msg string) {
-				prompts = append(prompts, msg)
+			var plugin any = &rootSelectorPlugin{}
+			if pluginName, ok := tt.config["plugin"].(string); ok {
+				plugin = r.plugins[pluginName]
+				g.Expect(plugin).ToNot(BeNil())
 			}
-
-			pluginName := tt.config["plugin"].(string)
-			plugin := r.plugins[pluginName]
-			g.Expect(plugin).ToNot(BeNil())
 
 			rawConfig, err := yaml.Marshal(tt.config)
 			g.Expect(err).ToNot(HaveOccurred())

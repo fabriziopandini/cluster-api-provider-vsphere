@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/cluster-api-provider-vsphere/hack/tools/testctl/core"
 )
 
-const machineDeploymentDeletePluginKey = "delete.machineDeployment.testctl"
+const machineDeploymentDeletePluginKey = "delete.machineDeployment.topology.cluster.testctl"
 
 // MachineDeploymentDeletePlugin can be used to delete MachineDeployments for a Cluster.
 type MachineDeploymentDeletePlugin struct{}

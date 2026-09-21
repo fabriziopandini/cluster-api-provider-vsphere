@@ -47,8 +47,8 @@ run:
   - plugin: select.cluster.testctl
     nameRegex: "^my-cluster-"
     run:
-      - plugin: scale.controlPlane.topology.cluster.testctl
-        replicas: 3
+      - plugin: edit.topology.cluster.testctl
+        version: v1.37.0
     runConfig:
       concurrency: 2
 runConfig:
@@ -81,6 +81,7 @@ entry. Fields:
 | `concurrency` | int | `1`         | Number of objects to process in parallel when a selector plugin returns more than one object. |
 | `failFast` | bool | `false`     | If `true`, stop scheduling new work as soon as one parallel action fails (already in-flight actions are still allowed to complete). |
 | `dryRun` | bool | `false` (*) | Run in dry-run mode: plugins log what they would do but don't mutate the cluster. Inherited from the top-level `runConfig` if not set locally. |
+| `skip` | bool | `false` | Skip this plugin, including its nested `run`, `runOnError`, `runAfter` lists and debug prompts. At the top level, skips the entire run. Configuration is still validated. |
 | `skipWait` | bool | `false`     | Don't wait for an action to converge (e.g. for a scale-up to complete) before moving on. |
 | `debug` | bool | `false` (*)     | Prompt for confirmation before running each plugin. Inherited from the top-level `runConfig` if not set locally. |
 | `debugOnError` | bool | `false` (*)     | Prompt for confirmation after a plugin fails. Inherited from the top-level `runConfig` if not set locally. |
@@ -90,10 +91,21 @@ entry. Fields:
 (*): if a value for `dryRun`, `debug`, `debugOnError` is provided in the top level `runConfig`, it is used as a default for the `runConfig`
 of the plugins calls at lower levels.
 
+For example, temporarily disable an action with `runConfig.skip`:
+
+```yaml
+run:
+  - plugin: apply.manifest.testctl
+    path: ./manifest.yaml
+    runConfig:
+      skip: true
+```
+
 ### Importing another config file
 
 The built-in `import.config.testctl` plugin lets you split a config across multiple files. Use
-it in place of a regular plugin entry:
+it in place of a regular plugin entry, anywhere a plugin entry is valid — at the top level, or
+nested inside a `run`, `runOnError`, or `runAfter` list at any depth:
 
 ```yaml
 run:
@@ -102,12 +114,12 @@ run:
 ```
 
 The referenced file's content replaces this entry entirely (its `plugin` field is dropped and
-the rest of the entry is merged in). Two rules apply:
+the rest of the entry is merged in). Rules and gotchas:
 
 - The importing entry's own config **cannot** have a `run` field — that must come from the
   imported file.
-- If the importing entry defines its own `runConfig`, it overrides the one from the imported
-  file (rather than being merged with it).
+- If the importing entry defines its own `runConfig`, it **overrides** the one from the
+  imported file (rather than being merged with it).
 
 ## Plugin reference
 
@@ -120,14 +132,18 @@ the call stack (see "Requires").
 |---|---|---|---|
 | `select.cluster.testctl` | selector | `Cluster` | — |
 | `delete.cluster.testctl` | executor | — | `select.cluster.testctl` |
-| `upgrade.cluster.testctl` | executor | — | `select.cluster.testctl` |
+| `edit.topology.cluster.testctl` | executor | — | `select.cluster.testctl` |
+| `check.topology.cluster.testctl` | executor | — | `select.cluster.testctl` |
 | `update.controlPlaneEndpoint.cluster.testctl` | executor | — | `select.cluster.testctl` |
 | `select.controlPlane.testctl` | selector | `ControlPlane` | `select.cluster.testctl` |
-| `scale.controlPlane.testctl` | executor | — | `select.controlPlane.testctl` |
+| `edit.controlPlane.topology.cluster.testctl` | executor | — | `select.controlPlane.testctl` |
 | `select.machineDeployment.testctl` | selector | `MachineDeployment` | `select.cluster.testctl` |
-| `create.machineDeployment.testctl` | executor | — | `select.cluster.testctl` |
-| `scale.machineDeployment.testctl` | executor | — | `select.machineDeployment.testctl` |
-| `delete.machineDeployment.testctl` | executor | — | `select.machineDeployment.testctl` |
+| `create.machineDeployment.topology.cluster.testctl` | executor | — | `select.cluster.testctl` |
+| `edit.machineDeployment.topology.cluster.testctl` | executor | — | `select.machineDeployment.testctl` |
+| `delete.machineDeployment.topology.cluster.testctl` | executor | — | `select.machineDeployment.testctl` |
+| `install.helmChart.testctl` | executor | — | none (target is auto-detected, see below) |
+| `uninstall.helmChart.testctl` | executor | — | none (target is auto-detected, see below) |
+| `apply.manifest.testctl` | executor | — | none (target is auto-detected, see below) |
 
 ### `select.cluster.testctl`
 
@@ -157,19 +173,59 @@ Deletes the selected Cluster and waits for it to be removed (unless `skipWait` i
     - plugin: delete.cluster.testctl
 ```
 
-### `upgrade.cluster.testctl`
+### `edit.topology.cluster.testctl`
 
-Go type: `plugins.ClusterUpgradePlugin`, config: `plugins.ClusterUpgradePluginConfig`.
+Go type: `plugins.TopologyEditPlugin`, config: `plugins.TopologyEditPluginConfig`.
 
-Patches `spec.topology.version` on the selected Cluster and waits for the control plane and
-all MachineDeployments to roll out to the new version. Requires the Cluster to use
-ClusterClass (`spec.topology` must be defined).
+Patches any subset of `spec.topology` fields on the selected Cluster in a single patch (so
+multiple changes, e.g. upgrading the version and rebasing to a new ClusterClass, are applied
+concurrently) and waits for the control plane and all MachineDeployments to converge. Requires
+the Cluster to use ClusterClass (`spec.topology` must be defined).
+
+`spec.topology.controlPlane` and `spec.topology.workers.machineDeployments` fields are out of
+scope for this plugin — they're handled by
+[`edit.controlPlane.topology.cluster.testctl`](#editcontrolplanetopologyclustertestctl) and
+[`edit.machineDeployment.topology.cluster.testctl`](#editmachinedeploymenttopologyclustertestctl).
+
+Every config field is optional; only the fields you set are patched:
+
+| Field | Patches | Extra wait behavior |
+|---|---|---|
+| `version` | `spec.topology.version` | waits for the control plane and all MachineDeployments to roll out to the new version |
+| `classRef` | `spec.topology.classRef` | waits for the control plane and all MachineDeployments to converge against the new ClusterClass |
+| `variables` | `spec.topology.variables` | — (their impact is defined by patches, so no direct convergence signal exists) |
 
 ```yaml
 - plugin: select.cluster.testctl
   run:
-    - plugin: upgrade.cluster.testctl
+    - plugin: edit.topology.cluster.testctl
       version: v1.31.0
+```
+
+### `check.topology.cluster.testctl`
+
+Go type: `plugins.TopologyCheckPlugin`, config: `plugins.TopologyCheckPluginConfig`.
+
+Read-only: checks that the selected Cluster's topology is in the desired state, without
+patching anything. Requires ClusterClass (`spec.topology` must be defined).
+
+`checks` selects which of the following to perform; if omitted, every check runs:
+
+| Check | What it verifies |
+|---|---|
+| `Availability` | the Cluster's own `Available` condition is `True` |
+| `ControlPlane` | the same checks performed by [`edit.controlPlane.topology.cluster.testctl`](#editcontrolplanetopologyclustertestctl) (`waitForControlPlane`, `waitForControlPlaneMachineHealthCheck`, `waitForControlPlaneMachines`) |
+| `MachineDeployments` | the same checks performed by [`edit.machineDeployment.topology.cluster.testctl`](#editmachinedeploymenttopologyclustertestctl) (`waitForMachineDeployment`, `waitForMachineDeploymentMachineHealthCheck`, `waitForMachineDeploymentMachines`) for every MachineDeployment |
+
+Like the edit plugins, it retries every 5s until the selected checks pass or `timeout` elapses
+(default 5m); set `skipWait: true` to check once and fail immediately if not currently
+satisfied. `dryRun` has no effect, since this plugin never mutates anything.
+
+```yaml
+- plugin: select.cluster.testctl
+  run:
+    - plugin: check.topology.cluster.testctl
+      checks: [Availability, ControlPlane, MachineDeployments]   # optional, defaults to all three
 ```
 
 ### `update.controlPlaneEndpoint.cluster.testctl`
@@ -200,19 +256,41 @@ Selects the Cluster's control plane. Only `KubeadmControlPlane` is currently sup
       run: [...]
 ```
 
-### `scale.controlPlane.testctl`
+### `edit.controlPlane.topology.cluster.testctl`
 
-Go type: `plugins.ControlPlaneScalePlugin`, config: `plugins.ControlPlaneScalePluginConfig`.
+Go type: `plugins.ControlPlaneEditPlugin`, config: `plugins.ControlPlaneEditPluginConfig`.
 
-Patches `spec.topology.controlPlane.replicas` on the Cluster and waits for the
-KubeadmControlPlane to reach the target replica count. Requires ClusterClass
-(`spec.topology` must be defined).
+Patches any subset of `spec.topology.controlPlane` fields on the Cluster in a single patch
+(so multiple changes, e.g. scaling up and changing taints, are applied concurrently) and waits
+for the change to converge. Requires ClusterClass (`spec.topology` must be defined).
+
+Every config field is optional; a nil field means "don't touch"; a non-nil field means "set the
+corresponding ControlPlaneTopology field to exactly this value":
+
+| Field | Patches | Extra wait behavior |
+|---|---|---|
+| `metadata` | `spec.topology.controlPlane.metadata` | waits for the labels/annotations to appear on the KubeadmControlPlane |
+| `replicas` | `spec.topology.controlPlane.replicas` | waits for the KubeadmControlPlane to reach the target replica count |
+| `rollout` | `spec.topology.controlPlane.rollout` | — |
+| `healthCheck` | `spec.topology.controlPlane.healthCheck` | waits for the corresponding MachineHealthCheck to reflect the desired checks/remediation (or to be absent, if disabled) |
+| `deletion` | `spec.topology.controlPlane.deletion` | — |
+| `taints` | `spec.topology.controlPlane.taints` | waits for every ControlPlane Machine's `spec.taints` to match |
+| `readinessGates` | `spec.topology.controlPlane.readinessGates` | — |
+| `variables` | `spec.topology.controlPlane.variables` | — |
+
+Regardless of which fields are set, the plugin always waits for every ControlPlane Machine to
+have the `Available` condition `True`, and for the KubeadmControlPlane itself to be `Available`
+and not `RollingOut` (i.e. not updating in place) before returning.
 
 ```yaml
 - plugin: select.controlPlane.testctl
   run:
-    - plugin: scale.controlPlane.testctl
+    - plugin: edit.controlPlane.topology.cluster.testctl
       replicas: 3
+      taints:
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+          propagation: Always
 ```
 
 ### `select.machineDeployment.testctl`
@@ -230,7 +308,7 @@ Selects the Cluster's MachineDeployments.
       run: [...]
 ```
 
-### `create.machineDeployment.testctl`
+### `create.machineDeployment.topology.cluster.testctl`
 
 Go type: `plugins.MachineDeploymentCreatePlugin`, config:
 `plugins.MachineDeploymentCreatePluginConfig`.
@@ -242,7 +320,7 @@ and waits for the resulting MachineDeployments to come up. Requires ClusterClass
 ```yaml
 - plugin: select.cluster.testctl
   run:
-    - plugin: create.machineDeployment.testctl
+    - plugin: create.machineDeployment.topology.cluster.testctl
       count: 2                  # how many MachineDeploymentTopologies to create
       generateName: workers-    # prefix used to build each topology's name (workers-1, workers-2, ...)
                                  # only used if template.name is not set
@@ -251,23 +329,44 @@ and waits for the resulting MachineDeployments to come up. Requires ClusterClass
         replicas: 1
 ```
 
-### `scale.machineDeployment.testctl`
+### `edit.machineDeployment.topology.cluster.testctl`
 
-Go type: `plugins.MachineDeploymentScalePlugin`, config:
-`plugins.MachineDeploymentScalePluginConfig`.
+Go type: `plugins.MachineDeploymentEditPlugin`, config: `plugins.MachineDeploymentEditPluginConfig`.
 
-Patches the replica count of the selected MachineDeployment's topology. `replicas` (absolute)
-takes precedence over `replicasDiff` (relative) if both are set.
+Patches any subset of the selected MachineDeployment's topology fields on the Cluster in a
+single patch (so multiple changes, e.g. scaling up and changing taints, are applied
+concurrently) and waits for the change to converge. Requires ClusterClass (`spec.topology` must
+be defined).
+
+Every config field is optional; a nil field means "don't touch"; a non-nil field means "set the
+corresponding MachineDeploymentTopology field to exactly this value":
+
+| Field | Patches | Extra wait behavior |
+|---|---|---|
+| `metadata` | topology entry's `metadata` | waits for the labels/annotations to appear on the MachineDeployment |
+| `class` | topology entry's `class` | — |
+| `failureDomain` | topology entry's `failureDomain` | — |
+| `replicas` | topology entry's `replicas` | waits for the MachineDeployment to reach the target replica count |
+| `healthCheck` | topology entry's `healthCheck` | waits for the corresponding MachineHealthCheck to reflect the desired checks/remediation (or to be absent, if disabled) |
+| `deletion` | topology entry's `deletion` | — |
+| `taints` | topology entry's `taints` | waits for every Machine's `spec.taints` to match |
+| `minReadySeconds` | topology entry's `minReadySeconds` | — |
+| `readinessGates` | topology entry's `readinessGates` | — |
+| `rollout` | topology entry's `rollout` | — |
+| `variables` | topology entry's `variables` | — |
+
+Regardless of which fields are set, the plugin always waits for every Machine of the
+MachineDeployment to have the `Available` condition `True`, and for the MachineDeployment
+itself to be `Available` and not `RollingOut` (i.e. not updating in place) before returning.
 
 ```yaml
 - plugin: select.machineDeployment.testctl
   run:
-    - plugin: scale.machineDeployment.testctl
-      replicas: 5        # scale to this many replicas
-      # replicasDiff: 2  # or, scale by this delta relative to the current count
+    - plugin: edit.machineDeployment.topology.cluster.testctl
+      replicas: 5
 ```
 
-### `delete.machineDeployment.testctl`
+### `delete.machineDeployment.topology.cluster.testctl`
 
 Go type: `plugins.MachineDeploymentDeletePlugin` (no config).
 
@@ -278,7 +377,81 @@ be deleted.
 ```yaml
 - plugin: select.machineDeployment.testctl
   run:
-    - plugin: delete.machineDeployment.testctl
+    - plugin: delete.machineDeployment.topology.cluster.testctl
+```
+
+### `install.helmChart.testctl`
+
+Go type: `plugins.HelmChartInstallPlugin`, config: `plugins.HelmChartInstallPluginConfig`.
+
+Installs a Helm chart using `helm upgrade --install`. By default, an existing release is
+skipped (checked via `helm status`). Set `upgrade: true` on the plugin to upgrade an existing
+release using the configured chart, version, and values. Missing releases are installed in
+either mode.
+If nested under`select.cluster.testctl`, it targets the selected **workload** cluster,
+otherwise it targets the **management** cluster testctl is connected to.
+
+```yaml
+- plugin: install.helmChart.testctl   # top level: applies to the management cluster
+  releaseName: my-release
+  chart: my-chart
+  repoURL: https://example.com/charts   # optional, if chart is a repo chart name
+  version: 1.2.3                        # optional
+  upgrade: false                        # optional, set true to upgrade an existing release
+  namespace: my-namespace               # optional, defaults to "default"
+  values:                               # optional, arbitrary inline chart values
+    key: value
+  insecure: false                       # optional, maps to helm's --plain-http (OCI registries only)
+
+- plugin: select.cluster.testctl
+  run:
+    - plugin: install.helmChart.testctl   # nested: applies to the workload cluster
+      releaseName: my-release
+      chart: my-chart
+```
+
+### `uninstall.helmChart.testctl`
+
+Go type: `plugins.HelmChartUninstallPlugin`, config: `plugins.HelmChartUninstallPluginConfig`.
+
+Uninstalls a Helm release by shelling out to the `helm` CLI. Skips entirely if the release
+doesn't exist.
+If nested under `select.cluster.testctl`, it targets the selected **workload** cluster,
+otherwise it targets the **management** cluster testctl is connected to.
+
+```yaml
+- plugin: uninstall.helmChart.testctl   # top level: targets the management cluster
+  releaseName: my-release
+  namespace: my-namespace                # optional, defaults to "default"
+
+- plugin: select.cluster.testctl
+  run:
+    - plugin: uninstall.helmChart.testctl   # nested: targets the workload cluster
+      releaseName: my-release
+```
+
+### `apply.manifest.testctl`
+
+Go type: `plugins.ManifestApplyPlugin`, config: `plugins.ManifestApplyPluginConfig`.
+
+Substitutes a YAML manifest file with the `envsubst` CLI, then applies it by shelling out to
+`kubectl apply`. Skips entirely if every object in the manifest already exists on the target
+cluster.
+If nested under`select.cluster.testctl`, it targets the selected **workload** cluster,
+otherwise it targets the **management** cluster testctl is connected to.
+
+```yaml
+- plugin: apply.manifest.testctl   # top level: applies to the management cluster
+  path: ./manifests/my-manifest.yaml
+  env:                              # optional, extra vars for envsubst, in addition to
+                                     # (and overriding, on conflict) the process environment
+    - name: MY_VAR
+      value: my-value
+
+- plugin: select.cluster.testctl
+  run:
+    - plugin: apply.manifest.testctl   # nested: applies to the workload cluster
+      path: ./manifests/my-manifest.yaml
 ```
 
 ### Putting it together
@@ -296,10 +469,10 @@ run:
     run:
       - plugin: select.controlPlane.testctl
         run:
-          - plugin: scale.controlPlane.testctl
+          - plugin: edit.controlPlane.topology.cluster.testctl
             replicas: 3
 
-      - plugin: create.machineDeployment.testctl
+      - plugin: create.machineDeployment.topology.cluster.testctl
         count: 1
         generateName: workers-
         template:
@@ -309,9 +482,9 @@ run:
           - plugin: select.machineDeployment.testctl
             topologyNameRegex: "^workers-"
             run:
-              - plugin: delete.machineDeployment.testctl
+              - plugin: delete.machineDeployment.topology.cluster.testctl
 
-      - plugin: upgrade.cluster.testctl
+      - plugin: edit.topology.cluster.testctl
         version: v1.31.0
     
     runConfig:
@@ -417,8 +590,12 @@ func (p MyActionPlugin) ValidateCallStack(_ context.Context, callStack []string)
 
 ## Known limitations
 
-- `create.machineDeployment.testctl` cannot be simulated in dry-run mode: since nested `run`
+- `create.machineDeployment.topology.cluster.testctl` cannot be simulated in dry-run mode: since nested `run`
   steps act on the MachineDeployments it would have created, dry-run skips both the creation
   and any nested `run` entirely for that entry.
+- `install.helmChart.testctl`/`uninstall.helmChart.testctl` and `apply.manifest.testctl` require `helm`/`kubectl`/`envsubst` on
+  `PATH` (or the `TESTCTL_HELM_BIN`/`TESTCTL_KUBECTL_BIN`/`TESTCTL_ENVSUBST_BIN` env var
+  overrides).
+
 
 go run ../cluster-api-provider-vsphere/hack/tools/testctl --config ./tmp/yaml/testctl/foo.yaml

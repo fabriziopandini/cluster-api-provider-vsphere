@@ -18,7 +18,10 @@ limitations under the License.
 package main
 
 import (
+	"bufio"
+	"context"
 	"fmt"
+	"io"
 	"os"
 
 	pkgerrors "github.com/pkg/errors"
@@ -133,6 +136,17 @@ func runTest(_ *cobra.Command, _ []string) error {
 		return pkgerrors.Wrapf(err, "failed to create client from %q", configLoadingRules.GetExplicitFile())
 	}
 
+	// Make the kubeconfig for the management cluster available to plugins that need to shell out
+	// to an external CLI (e.g. helm, kubectl) against the management cluster.
+	config.CurrentContext = contextName
+	managementKubeconfig, err := clientcmd.Write(*config)
+	if err != nil {
+		return pkgerrors.Wrap(err, "failed to serialize kubeconfig for the management cluster")
+	}
+	objects := core.TestObjects{
+		core.ManagementKubeConfigKey: managementKubeconfig,
+	}
+
 	if _, err := os.Stat(rc.config); pkgerrors.Is(err, os.ErrNotExist) {
 		return pkgerrors.Errorf("file %s does not exist", rc.config)
 	}
@@ -142,5 +156,21 @@ func runTest(_ *cobra.Command, _ []string) error {
 		return pkgerrors.Wrapf(err, "failed to read file %s", rc.config)
 	}
 
-	return core.Run(ctx, c, configData, plugins.Catalog())
+	return core.Run(ctx, c, configData, plugins.Catalog(), objects, newCLIPrompter(os.Stdin, os.Stderr))
+}
+
+type cliPrompter struct {
+	in  *bufio.Reader
+	out io.Writer
+}
+
+var _ core.Prompter = &cliPrompter{}
+
+func newCLIPrompter(in io.Reader, out io.Writer) *cliPrompter {
+	return &cliPrompter{in: bufio.NewReader(in), out: out}
+}
+
+func (p *cliPrompter) Prompt(_ context.Context, msg string) {
+	fmt.Fprintln(p.out, msg)
+	_, _ = p.in.ReadString('\n')
 }

@@ -56,15 +56,33 @@ type CallStackValidatorPlugin interface {
 	ValidateCallStack(ctx context.Context, callStack []string) error
 }
 
+// Prompter is used by the runner to interactively confirm actions with the user when
+// runConfig.debug or runConfig.debugOnError is set. Prompt should block until the user
+// acknowledges msg (e.g. by pressing Enter) before the runner continues.
+//
+// If no Prompter is passed to Run, debug/debugOnError have no effect.
+type Prompter interface {
+	// Prompt displays msg to the user and blocks until they acknowledge it.
+	Prompt(ctx context.Context, msg string)
+}
+
+// PrompterFunc adapts a plain function to the Prompter interface.
+type PrompterFunc func(ctx context.Context, msg string)
+
+// Prompt implements Prompter.
+func (f PrompterFunc) Prompt(ctx context.Context, msg string) {
+	f(ctx, msg)
+}
+
 // rootSelectorPlugin is an internal plugin that is used only to kick off the run process.
 type rootSelectorPlugin struct{}
 
 var _ SelectorPlugin = &rootSelectorPlugin{}
 
 // Select returns a list of Objects with only one item that represents the root context of the test.
-func (r *rootSelectorPlugin) Select(_ context.Context, _ client.Client, _ TestObjects, _ any, _ RunConfig) ([]TestObjects, error) {
+func (r *rootSelectorPlugin) Select(_ context.Context, _ client.Client, objects TestObjects, _ any, _ RunConfig) ([]TestObjects, error) {
 	return []TestObjects{
-		{},
+		objects,
 	}, nil
 }
 

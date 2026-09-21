@@ -204,6 +204,9 @@ CAPI_HACK_TOOLS_VER := 068da3fc018781f50fb860cd7f4e9c334293509f # Note: this the
 BOSKOSCTL_BIN := boskosctl
 BOSKOSCTL := $(abspath $(TOOLS_BIN_DIR)/$(BOSKOSCTL_BIN))
 
+TESTCTL_BIN := testctl
+TESTCTL := $(abspath $(TOOLS_BIN_DIR)/$(TESTCTL_BIN))
+
 PROWJOB_GEN_VER := $(CAPI_HACK_TOOLS_VER)
 PROWJOB_GEN_BIN := prowjob-gen
 PROWJOB_GEN := $(abspath $(TOOLS_BIN_DIR)/$(PROWJOB_GEN_BIN)-$(PROWJOB_GEN_VER))
@@ -1122,6 +1125,9 @@ $(PROWJOB_GEN_BIN): $(PROWJOB_GEN) ## Build a local copy of prowjob-gen.
 .PHONY: $(BOSKOSCTL_BIN)
 $(BOSKOSCTL_BIN): $(BOSKOSCTL) ## Build a local copy of boskosctl.
 
+.PHONY: $(TESTCTL_BIN)
+$(TESTCTL_BIN): $(TESTCTL) ## Build a local copy of testctl.
+
 .PHONY: $(GOTESTSUM_BIN)
 $(GOTESTSUM_BIN): $(GOTESTSUM) ## Build a local copy of gotestsum.
 
@@ -1175,6 +1181,9 @@ $(CONVERSION_GEN): # Build conversion-gen.
 
 $(BOSKOSCTL): # Build boskosctl from tools folder.
 	go build -o $(TOOLS_BIN_DIR)/$(BOSKOSCTL_BIN) ./hack/tools/boskosctl
+
+$(TESTCTL): # Build testctl from tools folder.
+	go build -o $(TOOLS_BIN_DIR)/$(TESTCTL_BIN) ./hack/tools/testctl
 
 $(PROWJOB_GEN): # Build prowjob-gen.
 	GOBIN=$(TOOLS_BIN_DIR) $(GO_TOOLS_BUILD) $(PROWJOB_GEN_PKG) $(PROWJOB_GEN_BIN) $(PROWJOB_GEN_VER)

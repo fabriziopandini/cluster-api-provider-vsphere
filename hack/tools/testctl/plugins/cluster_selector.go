@@ -35,6 +35,9 @@ const clusterSelectorPluginKey = "select.cluster.testctl"
 // ClusterObjectKey is the key used to identify the Cluster object in TestObjects.
 const ClusterObjectKey = "Cluster"
 
+// ClusterClassObjectKey is the key used to identify the ClusterClass object in TestObjects.
+const ClusterClassObjectKey = "ClusterClass"
+
 // ClusterSelectorPlugin can be used to select Clusters.
 type ClusterSelectorPlugin struct{}
 
@@ -73,6 +76,15 @@ func (p *ClusterSelectorPlugin) Select(ctx context.Context, c client.Client, _ c
 	for i := range clusters {
 		ret[i] = map[string]any{
 			ClusterObjectKey: clusters[i],
+		}
+
+		if clusters[i].Spec.Topology.IsDefined() {
+			clusterClass, err := getClusterClass(ctx, c, clusters[i])
+			if err != nil {
+				return nil, err
+			}
+
+			ret[i][ClusterClassObjectKey] = clusterClass
 		}
 	}
 
@@ -118,4 +130,18 @@ func UnwrapClusterTestObject(objects core.TestObjects) (*clusterv1.Cluster, erro
 		return nil, pkgerrors.Errorf("failed to cast the %s object to the target type", ClusterObjectKey)
 	}
 	return cluster, nil
+}
+
+// UnwrapClusterTestObject extracts the ClusterClass from TestObjects.
+func UnwrapClusterClassTestObject(objects core.TestObjects) (*clusterv1.ClusterClass, error) {
+	c, ok := objects[ClusterClassObjectKey]
+	if !ok {
+		return nil, pkgerrors.Errorf("failed to get the %s object from test objects. You must run the %s plugin before invoking this plugin", ClusterClassObjectKey, clusterSelectorPluginKey)
+	}
+
+	clusterClass, ok := c.(*clusterv1.ClusterClass)
+	if !ok {
+		return nil, pkgerrors.Errorf("failed to cast the %s object to the target type", ClusterClassObjectKey)
+	}
+	return clusterClass, nil
 }

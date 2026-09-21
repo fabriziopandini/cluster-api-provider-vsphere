@@ -23,6 +23,7 @@ import (
 
 	pkgerrors "github.com/pkg/errors"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
@@ -58,7 +59,11 @@ func init() {
 
 // Select selects the TestObjects to apply the test to, in this case a Cluster's MachineDeployments.
 func (p *MachineDeploymentSelectorPlugin) Select(ctx context.Context, c client.Client, objects core.TestObjects, pluginConfigUntyped any, runConfig core.RunConfig) ([]core.TestObjects, error) {
-	config, cluster, err := p.unwrapConfigAndTestObjects(objects, pluginConfigUntyped)
+	if ptr.Deref(runConfig.Concurrency, 1) > 1 {
+		return nil, pkgerrors.Errorf("%s does not support concurrency > 1: concurrent Exec calls on MachineDeployments of the same Cluster can race when patching Cluster.Spec.Topology.Workers.MachineDeployments", machineDeploymentSelectorPluginKey)
+	}
+
+	config, cluster, clusterClass, err := p.unwrapConfigAndTestObjects(objects, pluginConfigUntyped)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +78,9 @@ func (p *MachineDeploymentSelectorPlugin) Select(ctx context.Context, c client.C
 		ret[i] = map[string]any{
 			ClusterObjectKey:                   cluster.DeepCopy(),
 			MachineDeploymentSelectorObjectKey: machineDeployments[i],
+		}
+		if clusterClass != nil {
+			ret[i][ClusterClassObjectKey] = clusterClass.DeepCopy()
 		}
 	}
 
@@ -93,7 +101,7 @@ func (p MachineDeploymentSelectorPlugin) ParseConfig(_ context.Context, rawPlugi
 
 // GenerateMessage generates a message text for the plugin call.
 func (p MachineDeploymentSelectorPlugin) GenerateMessage(objects core.TestObjects, pluginConfigUntyped any) (string, error) {
-	_, cluster, err := p.unwrapConfigAndTestObjects(objects, pluginConfigUntyped)
+	_, cluster, _, err := p.unwrapConfigAndTestObjects(objects, pluginConfigUntyped)
 	if err != nil {
 		return "", err
 	}
@@ -108,7 +116,7 @@ func (p MachineDeploymentSelectorPlugin) ValidateCallStack(_ context.Context, ca
 	return nil
 }
 
-func (p *MachineDeploymentSelectorPlugin) unwrapConfigAndTestObjects(objects core.TestObjects, pluginConfigUntyped any) (*MachineDeploymentSelectorPluginConfig, *clusterv1.Cluster, error) {
+func (p *MachineDeploymentSelectorPlugin) unwrapConfigAndTestObjects(objects core.TestObjects, pluginConfigUntyped any) (*MachineDeploymentSelectorPluginConfig, *clusterv1.Cluster, *clusterv1.ClusterClass, error) {
 	config := &MachineDeploymentSelectorPluginConfig{}
 	if pluginConfigUntyped != nil {
 		config = pluginConfigUntyped.(*MachineDeploymentSelectorPluginConfig)
@@ -116,10 +124,19 @@ func (p *MachineDeploymentSelectorPlugin) unwrapConfigAndTestObjects(objects cor
 
 	cluster, err := UnwrapClusterTestObject(objects)
 	if err != nil {
-		return config, nil, err
+		return config, nil, nil, err
 	}
 
-	return config, cluster, nil
+	if cluster.Spec.Topology.IsDefined() {
+		clusterClass, err := UnwrapClusterClassTestObject(objects)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		return config, cluster, clusterClass, nil
+	}
+
+	return config, cluster, nil, nil
 }
 
 // UnwrapMachineDeploymentTestObject extracts the MachineDeployment from TestObjects.

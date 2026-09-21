@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/cluster-api-provider-vsphere/hack/tools/testctl/core"
 )
 
-const machineDeploymentCreatePluginKey = "create.machineDeployment.testctl"
+const machineDeploymentCreatePluginKey = "create.machineDeployment.topology.cluster.testctl"
 
 // MachineDeploymentCreatePlugin can be used to create MachineDeployments for a Cluster.
 type MachineDeploymentCreatePlugin struct{}

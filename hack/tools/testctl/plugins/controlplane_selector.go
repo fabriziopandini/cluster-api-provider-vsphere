@@ -50,7 +50,7 @@ func init() {
 
 // Select selects the TestObjects to apply the test to, in this case the Cluster's ControlPlane.
 func (p *ControlPlaneSelectorPlugin) Select(ctx context.Context, c client.Client, objects core.TestObjects, _ any, _ core.RunConfig) ([]core.TestObjects, error) {
-	cluster, err := p.unwrapTestObjects(objects)
+	cluster, clusterClass, err := p.unwrapTestObjects(objects)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +58,16 @@ func (p *ControlPlaneSelectorPlugin) Select(ctx context.Context, c client.Client
 	controlPlane, err := getControlPlane(ctx, c, cluster)
 	if err != nil {
 		return nil, err
+	}
+
+	if clusterClass != nil {
+		return []core.TestObjects{
+			{
+				ClusterObjectKey:      cluster.DeepCopy(),
+				ClusterClassObjectKey: clusterClass.DeepCopy(),
+				ControlPlaneObjectKey: controlPlane,
+			},
+		}, nil
 	}
 
 	return []core.TestObjects{
@@ -70,7 +80,7 @@ func (p *ControlPlaneSelectorPlugin) Select(ctx context.Context, c client.Client
 
 // GenerateMessage generates a message text for the plugin call.
 func (p ControlPlaneSelectorPlugin) GenerateMessage(objects core.TestObjects, _ any) (string, error) {
-	cluster, err := p.unwrapTestObjects(objects)
+	cluster, _, err := p.unwrapTestObjects(objects)
 	if err != nil {
 		return "", err
 	}
@@ -85,17 +95,26 @@ func (p ControlPlaneSelectorPlugin) ValidateCallStack(_ context.Context, callSta
 	return nil
 }
 
-func (p *ControlPlaneSelectorPlugin) unwrapTestObjects(objects core.TestObjects) (*clusterv1.Cluster, error) {
+func (p *ControlPlaneSelectorPlugin) unwrapTestObjects(objects core.TestObjects) (*clusterv1.Cluster, *clusterv1.ClusterClass, error) {
 	cluster, err := UnwrapClusterTestObject(objects)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if cluster.Spec.ControlPlaneRef.Kind != "KubeadmControlPlane" {
-		return nil, pkgerrors.Errorf("unable to select control plane for Cluster %s. Support for control plane with kind different than KubeadmControlPlane not implemented yet", klog.KObj(cluster))
+		return nil, nil, pkgerrors.Errorf("unable to select control plane for Cluster %s. Support for control plane with kind different than KubeadmControlPlane not implemented yet", klog.KObj(cluster))
 	}
 
-	return cluster, nil
+	if cluster.Spec.Topology.IsDefined() {
+		clusterClass, err := UnwrapClusterClassTestObject(objects)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return cluster, clusterClass, nil
+	}
+
+	return cluster, nil, nil
 }
 
 // UnwrapControlPlaneTestObject extracts the ControlPlane from TestObjects.
